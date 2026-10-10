@@ -7,13 +7,18 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --test tests/core.test.js",
+    "test": "node --test tests/core.test.js tests/access.test.js",
     "test:e2e": "playwright test",
-    "test:pages": "node scripts/check-pages.mjs"
+    "test:pages": "node scripts/check-pages.mjs",
+    "cloudflare:check": "wrangler deploy --dry-run --outdir /tmp/duo-worker-build"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "prettier": "^3.9.9",
-    "vite": "^7.1.0"
+    "vite": "^7.1.0",
+    "wrangler": "^4.149.0"
+  },
+  "dependencies": {
+    "jose": "^6.2.12"
   }
 }

@@ -16,6 +16,15 @@ export default defineConfig({
           );
         }
         const file = `${options.dir}/sw.js`;
+        for (const asset of [
+          "sw.js",
+          "manifest.webmanifest",
+          "icon-192.png",
+          "icon-512.png",
+        ]) {
+          hash.update(asset);
+          hash.update(readFileSync(`${options.dir}/${asset}`));
+        }
         writeFileSync(
           file,
           readFileSync(file, "utf8").replace(

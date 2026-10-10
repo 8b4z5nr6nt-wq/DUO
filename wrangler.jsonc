@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "duo-private",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-10-09",
+  "workers_dev": true,
+  "preview_urls": false,
+  "keep_vars": true,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+  },
+}
