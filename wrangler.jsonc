@@ -6,6 +6,7 @@
   "workers_dev": true,
   "preview_urls": false,
   "keep_vars": true,
+  "vars": { "GITHUB_OWNER_ID": "322092713" },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

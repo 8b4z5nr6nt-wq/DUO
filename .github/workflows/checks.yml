@@ -1,8 +1,5 @@
 name: Validate DUO
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,3 +18,4 @@ jobs:
       - run: npm run cloudflare:check
       - run: npx playwright install --with-deps chromium
       - run: npm run test:pages
+      - run: npm run test:private

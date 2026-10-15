@@ -69,7 +69,8 @@ self.addEventListener("fetch", (event) => {
   if (
     event.request.method !== "GET" ||
     url.origin !== self.location.origin ||
-    url.pathname.startsWith("/cdn-cgi/access/")
+    url.pathname.startsWith("/cdn-cgi/access/") ||
+    url.pathname.startsWith("/auth/")
   )
     return;
   event.respondWith(
