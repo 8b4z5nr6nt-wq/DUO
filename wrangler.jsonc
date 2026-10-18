@@ -9,6 +9,7 @@
   "vars": {
     "GITHUB_OWNER_ID": "322092713",
     "APP_ORIGIN": "https://duo-private.6hm8jp7tv6.workers.dev",
+    "GITHUB_CLIENT_ID": "Ov23li2Vtu8w6B8Vbt1l",
   },
   "assets": {
     "directory": "./dist",

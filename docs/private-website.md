@@ -41,10 +41,9 @@ OAuth Appの登録名やホームページURLなどは公開される情報で�
 
 | 名前                   | 種類             | 値                           |
 | ---------------------- | ---------------- | ---------------------------- |
-| `GITHUB_CLIENT_ID`     | Text             | 手順2のClient ID             |
 | `GITHUB_CLIENT_SECRET` | Secret（暗号化） | 手順2で生成したClient Secret |
 
-配信URLの `APP_ORIGIN` と本人の数値ID `GITHUB_OWNER_ID` は `wrangler.jsonc` に設定済みです。この2つを管理画面へ追加する必要はありません。配信URLを変更する場合は、コードとOAuth AppのURL設定を両方更新してください。ユーザー名の変更や他人の表示名に依存して許可しません。個別のメールアドレス登録も不要です。
+`APP_ORIGIN`（配信URL）、`GITHUB_OWNER_ID`（本人の数値ID）、`GITHUB_CLIENT_ID`（作成したOAuth Appの公開識別子）は `wrangler.jsonc` に設定済みです。この3つを管理画面へ追加する必要はありません。上の表にあるSecretだけを管理画面に入力します。配信URLやOAuth Appを変更する場合は、対応するコードの設定も更新してください。ユーザー名の変更や他人の表示名に依存して許可しません。個別のメールアドレス登録も不要です。
 
 Client Secret・パスワード・確認コードはチャット、README、GitHubのコードに書かないでください。SecretはCloudflareの設定画面へ直接入力します。
 
