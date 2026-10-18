@@ -16,7 +16,7 @@
 
 ### 1. WorkerのURLを確認
 
-Cloudflareの **Workers & Pages → duo-private → Overview（概要）** で、`https://duo-private.＜自分のサブドメイン＞.workers.dev` のURLを確認します。独自ドメイン購入は不要です。
+Cloudflareの画面から、WorkerのURLは `https://duo-private.6hm8jp7tv6.workers.dev` と確認済みです。独自ドメイン購入は不要です。このURLを `APP_ORIGIN` としてコードに設定しています。
 
 Workerは、認証設定が未完了なら503を返し、学習画面やファイルを表示しません。Zero Trustの請求先住所フォームは送信しません。以前のAccess保護を有効にしていた場合は、新しいGitHubログインの検証後にその保護を解除します。
 
@@ -24,12 +24,12 @@ Workerは、認証設定が未完了なら503を返し、学習画面やファ�
 
 [GitHubの新規OAuth App登録](https://github.com/settings/applications/new)を、DUOの所有者アカウントで開きます。GitHub公式のOAuth App登録項目はアプリ名・ホームページURL・説明・コールバックURLで、住所やカード情報は入力しません。
 
-| 項目                       | 入力内容                                   |
-| -------------------------- | ------------------------------------------ |
-| Application name           | `DUO personal login`                       |
-| Homepage URL               | 手順1のWorkerのURL                         |
-| Application description    | 任意。空欄で構いません                     |
-| Authorization callback URL | 手順1のURL末尾に `/auth/callback` を付ける |
+| 項目                       | 入力内容                                                   |
+| -------------------------- | ---------------------------------------------------------- |
+| Application name           | `DUO personal login`                                       |
+| Homepage URL               | `https://duo-private.6hm8jp7tv6.workers.dev`               |
+| Application description    | 任意。空欄で構いません                                     |
+| Authorization callback URL | `https://duo-private.6hm8jp7tv6.workers.dev/auth/callback` |
 
 Device Flowを有効にする必要はありません。`Register application` 後の **Client ID** を確認し、**Generate a new client secret** でSecretを作成します。過去に他の権限を与えたOAuth Appを流用せず、DUO専用に作成してください。
 
@@ -39,13 +39,12 @@ OAuth Appの登録名やホームページURLなどは公開される情報で�
 
 **duo-private → Settings → Variables and Secrets** に設定します。
 
-| 名前                   | 種類             | 値                                                     |
-| ---------------------- | ---------------- | ------------------------------------------------------ |
-| `APP_ORIGIN`           | Text             | 手順1の `https://…workers.dev`。パスやクエリは付けない |
-| `GITHUB_CLIENT_ID`     | Text             | 手順2のClient ID                                       |
-| `GITHUB_CLIENT_SECRET` | Secret（暗号化） | 手順2で生成したClient Secret                           |
+| 名前                   | 種類             | 値                           |
+| ---------------------- | ---------------- | ---------------------------- |
+| `GITHUB_CLIENT_ID`     | Text             | 手順2のClient ID             |
+| `GITHUB_CLIENT_SECRET` | Secret（暗号化） | 手順2で生成したClient Secret |
 
-本人の数値ID `GITHUB_OWNER_ID` はリポジトリの所有者IDを確認して `wrangler.jsonc` に設定済みです。ユーザー名の変更や他人の表示名に依存して許可しません。個別のメールアドレス登録も不要です。
+配信URLの `APP_ORIGIN` と本人の数値ID `GITHUB_OWNER_ID` は `wrangler.jsonc` に設定済みです。この2つを管理画面へ追加する必要はありません。配信URLを変更する場合は、コードとOAuth AppのURL設定を両方更新してください。ユーザー名の変更や他人の表示名に依存して許可しません。個別のメールアドレス登録も不要です。
 
 Client Secret・パスワード・確認コードはチャット、README、GitHubのコードに書かないでください。SecretはCloudflareの設定画面へ直接入力します。
 

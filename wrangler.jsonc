@@ -6,7 +6,10 @@
   "workers_dev": true,
   "preview_urls": false,
   "keep_vars": true,
-  "vars": { "GITHUB_OWNER_ID": "322092713" },
+  "vars": {
+    "GITHUB_OWNER_ID": "322092713",
+    "APP_ORIGIN": "https://duo-private.6hm8jp7tv6.workers.dev",
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
