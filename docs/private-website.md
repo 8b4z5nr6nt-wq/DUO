@@ -37,7 +37,17 @@ OAuth Appの登録名やホームページURLなどは公開される情報で�
 
 ### 3. CloudflareのWorkerに設定
 
-**duo-private → Settings → Variables and Secrets** に設定します。
+#### すでに「ビルド」の欄にSecretを登録した場合
+
+今回の画面では、**設定（Settings）→ ビルド（Builds）→ 変数とシークレット（Variables and secrets）** に登録されています。値を表示したり、入力し直したりする必要はありません。名前が `GITHUB_CLIENT_SECRET`、種類が **Secret** であることを確認します。
+
+同じビルド設定の上方にある **デプロイコマンド（Deploy command）** を `npm run deploy:private` に変更して保存し、ビルドを再実行します。**ビルドコマンド（Build command）** は `npm run build` のままです。
+
+この専用コマンドはビルド環境のSecretを標準入力からWranglerへ渡し、アプリを配信するWorkerと同じバージョンに暗号化Secretとして登録します。値をコマンド引数、一時ファイル、ログ、フロントエンドのビルドへ書きません。配信先はこのリポジトリの `wrangler.jsonc` に固定しています。登録不足や処理の失敗は値を含まない日本語で知らせます。
+
+#### 実行時のSecretへ直接登録する場合
+
+標準の配信コマンド `npx wrangler deploy` を使う場合は、**duo-private → 設定（Settings）→ 変数とシークレット（Variables and Secrets）** の実行時設定に登録します。こちらは **ビルド** 内にある同名の欄とは別です。
 
 | 名前                   | 種類             | 値                           |
 | ---------------------- | ---------------- | ---------------------------- |
@@ -53,7 +63,7 @@ Client Secret・パスワード・確認コードはチャット、README、GitH
 
 新しい配信処理は、確認が必要な設定の**名前だけ**を表示します。Secretや設定値そのものは表示しません。表示された設定名を確認してください。
 
-- `GITHUB_CLIENT_SECRET（未登録）`：Workerの **Settings → Variables and Secrets** に、種類 **Secret**・名前 **GITHUB_CLIENT_SECRET** で登録し、保存してデプロイします。**Settings → Build → Variables**などのビルド用変数では、実行中のWorkerへ届きません。
+- `GITHUB_CLIENT_SECRET（未登録）`：ビルド用に登録済みなら、上記の配信コマンド `npm run deploy:private` に変更して再実行します。標準の `npx wrangler deploy` では、ビルド用の登録だけでは実行中のWorkerへ届きません。実行時のSecretへ直接登録して保存・デプロイする方法も使えます。
 - Secretの形式を確認する表示：Client IDではなく、GitHubの **Generate a new client secret** で生成したSecretかを、利用者自身の画面で確認します。Secretの値をチャットやスクリーンショットへ送る必要はありません。
 - `APP_ORIGIN` / `GITHUB_OWNER_ID` / `GITHUB_CLIENT_ID`：コード側に設定済みなので、GitHub連携の配信対象が `main` で最新ビルドが成功しているかを確認します。
 - 具体的な設定名が出ない古い表示のままなら、Cloudflareの最新ビルドと再配信を確認し、ページを再読み込みします。
@@ -62,7 +72,7 @@ Client Secret・パスワード・確認コードはチャット、README、GitH
 
 ### 4. 配信・本人確認
 
-CloudflareのGitHub連携で非公開DUOの `main` を使い、ビルドコマンド `npm run build`、配信コマンド `npx wrangler deploy` で再配信します。Worker名は `duo-private` です。この方法で新しく有料プランを選ぶ必要はありません。
+CloudflareのGitHub連携で非公開DUOの `main` を使い、ビルドコマンド `npm run build` で再配信します。配信コマンドは、ビルド用Secretを使う場合は `npm run deploy:private`、実行時Secretへ直接登録した場合は `npx wrangler deploy` です。Worker名は `duo-private` です。この方法で新しく有料プランを選ぶ必要はありません。
 
 サイトを開くと「GitHubでログイン」が表示されます。GitHubにログインし、専用OAuth Appを承認します。リポジトリやメールを読む権限は要求しません。公開プロフィールの数値IDだけで本人を確認し、一致したらDUOを表示します。他のGitHubアカウントではログイン完了せず、学習ファイルを返しません。
 
@@ -90,12 +100,14 @@ npm ci
 npm test
 npm run build
 npm run cloudflare:check
+npm run deploy:private -- --dry-run
 npm run test:pages
 npm run test:private
 ```
 
-- 学習ロジック6件と、認証フロー・設定診断10件の単体テスト。GitHubの応答は架空のものに置き換え、本人のみ許可・state・PKCE・最小権限・期限・偽造・他人・外部障害・CSRF、設定診断で値を漏らさないことを確認します。
+- 学習ロジック6件、認証フロー・設定診断10件、配信時のSecret保護5件の単体テスト。GitHubの応答は架空のものに置き換え、本人のみ許可・state・PKCE・最小権限・期限・偽造・他人・外部障害・CSRF、設定診断で値を漏らさないことを確認します。配信テストは架空のSecretとローカルの子プロセスを使い、実際のPOSIXパイプで値が届くこと、引数・子の環境・出力に漏れないこと、設定不足・起動失敗・配信失敗で停止することを確認します。
 - `cloudflare:check` は配信せず、Workerをローカルでビルドします。
+- `deploy:private -- --dry-run` も配信しません。Secretは不要で、環境にあっても子へ渡さず、CloudflareへのSecret送信・アップロードを行いません。実配信のラッパーはCloudflare BuildsのLinux環境向けです。機密保護のためWranglerの生ログは表示せず、固定の完了・失敗メッセージを出します。
 - `test:pages` はサブディレクトリでのPWA検証で、Web公開はしません。
 - `test:private` は実際のローカルWorkers実行環境を一時HTTPSで起動し、未認証の全ファイルを拒否すること、試験用の署名済み本人Cookieでアプリを開けること、オフラインの検索・学習・履歴保存、認証URLをキャッシュしないことをChromiumで確認します。TLSは一時生成した試験証明書を限定して信頼し、外部通信の検証を無効にしません。
 
@@ -106,6 +118,8 @@ npm run test:private
 - [Workers料金・Freeプラン](https://developers.cloudflare.com/workers/platform/pricing/)
 - [Workersの上限](https://developers.cloudflare.com/workers/platform/limits/#daily-requests)
 - [静的アセットの無料枠超過時の動作](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)
+- [コードと同じバージョンへのSecret登録](https://developers.cloudflare.com/workers/configuration/secrets/#upload-secrets-alongside-code)
+- [Workers Buildsの配信コマンド・変数・権限](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)
 - [GitHub OAuth App登録](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app)
 - [GitHub OAuthとPKCE](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)
 - [GitHub OAuthの最小権限](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)

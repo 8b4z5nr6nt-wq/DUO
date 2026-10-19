@@ -105,13 +105,16 @@ GitHubのコードを非公開に保ち、Cloudflare Workers FreeとGitHubログ
 
 [非公開サイトの設定・配信手順](docs/private-website.md)に、Workers Freeの確認、GitHub OAuth Appの設定、本人IDだけの許可、WorkerのSecret、配信方法、Safari・オフラインの受け入れ確認をまとめています。認証設定が未完了なら配信処理はファイルを返しません。
 
+Cloudflareの**ビルド用**に `GITHUB_CLIENT_SECRET` を登録済みの場合は、デプロイコマンドを **`npm run deploy:private`** にします。登録済みの暗号化Secretを、値を表示・ファイル保存せず実行時のWorkerへ渡して配信します。ビルドコマンドは `npm run build` のままです。標準の `npx wrangler deploy` を使う場合は、ビルド用とは別の実行時Secretへの登録が必要です。
+
 ```sh
 npm run build
 npm test
 npm run cloudflare:check
+npm run deploy:private -- --dry-run
 ```
 
-`cloudflare:check` はローカルでのWorkerビルド確認で、Web公開しません。利用者のスクリーンショットでは従来版Workerのビルド成功を確認しています。新しいGitHubログイン方式の設定・実認証・Safari実機確認は未完了です。GitHub Pagesの公開ワークフローは削除し、`.github/workflows/checks.yml` で検証だけを実行します。既存の `npm run test:pages` はサブディレクトリ・オフライン検証用として残しています。
+`cloudflare:check` と `deploy:private -- --dry-run` はローカルでのWorkerビルド確認で、Web公開しません。後者もSecretを送信しません。利用者のスクリーンショットでは従来版Workerのビルド成功を確認しています。新しいGitHubログイン方式の設定・実認証・Safari実機確認は未完了です。GitHub Pagesの公開ワークフローは削除し、`.github/workflows/checks.yml` で検証だけを実行します。既存の `npm run test:pages` はサブディレクトリ・オフライン検証用として残しています。
 
 URL・ドメインが変わる場合は、移行前にJSONバックアップを保存して移行先で復元してください。オフライン保存済みのデータは、その端末を利用できる人には見られるため端末のロックも利用してください。
 
@@ -127,7 +130,8 @@ URL・ドメインが変わる場合は、移行前にJSONバックアップを�
 
 ## 今回の検証結果
 
-- Node.js24.19.0で学習ロジック6件・本人限定ログインと設定診断10件、合計16件の単体テストに成功。
+- Node.js24.19.0で学習ロジック6件・本人限定ログインと設定診断10件・配信時のSecret保護5件、合計21件の単体テストに成功。
+- 架空のSecretを実際のPOSIXパイプとWranglerへ渡す配信前ビルドに成功。値が出力や生成物に含まれないことを確認。Secretを渡さない専用コマンドのdry-runにも成功。
 - 本番ビルドとWorkerの配信前ビルドに成功。
 - Chromiumの3画面サイズでオフライン再読み込み・検索・4方向学習・履歴保存・バックアップを再確認。
 - 実際のローカルWorkers実行環境とHTTPSで、未認証ファイルの拒否・試験用の本人Cookieでの配信・オフラインの検索／学習／保存・認証URLのキャッシュ除外を確認。
