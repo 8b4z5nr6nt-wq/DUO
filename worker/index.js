@@ -152,7 +152,7 @@ const loginErrors = {
 function authPage(title, content, action, status) {
   // Every argument is fixed application text, never an identity-provider value.
   return reply(
-    `<!doctype html><html lang="ja"><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DUO ログイン</title><style>body{font-family:system-ui;background:#101113;color:#eee;max-width:32rem;margin:15vh auto;padding:24px;line-height:1.8}a{display:inline-block;color:#17210e;background:#bded99;border-radius:12px;padding:12px 20px;text-decoration:none;font-weight:bold}p{color:#bbc0c8}</style><h1>${title}</h1>${content}<a href="/auth/login">${action}</a><p>学習データはこの端末内に保存されます。</p></html>`,
+    `<!doctype html><html lang="ja"><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#edf5ff"><title>DUO ログイン</title><style>html{min-height:100%;background:radial-gradient(ellipse at top left,#d4e8ff,transparent 65%),#edf5ff}body{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#193955;max-width:32rem;margin:12vh auto;padding:30px;line-height:1.8;background:rgba(255,255,255,.88);border:1px solid #fff;border-radius:24px;box-shadow:0 12px 40px #2b5b9414}h1{color:#225aa4;line-height:1.4}a{display:inline-block;color:#fff;background:#2464c3;border-radius:12px;padding:12px 20px;text-decoration:none;font-weight:bold}a:focus-visible{outline:3px solid #2464c3;outline-offset:4px}p{color:#526d85}@media(max-width:600px){body{margin:10vh 18px;padding:24px}}</style><h1>${title}</h1>${content}<a href="/auth/login">${action}</a><p>学習データはこの端末内に保存されます。</p></html>`,
     status,
     {
       "Content-Type": "text/html; charset=utf-8",

@@ -47,9 +47,10 @@ let options = {
   order: "number",
   count: "",
 };
-function notify(text) {
+function notify(text, tone = "error") {
   const el = document.querySelector("#notice");
   el.textContent = text;
+  el.dataset.tone = tone;
   el.hidden = !text;
 }
 async function commit(change) {
@@ -199,7 +200,7 @@ function learn() {
   }
   const item = current(),
     prompt = study.direction === "en-ja" ? item.en : item.ja;
-  app.innerHTML = `<div class="learning">${title("学習", `${study.index + 1} / ${study.queue.length} 問 · ${type(item)} ${item.number} · セクション ${item.section} · ${study.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"}`)}<div class="row between"><span id="timer" aria-live="off"></span><button id="pause">${study.paused ? "再開" : "一時停止"}</button></div><p id="paused" ${study.paused ? "" : "hidden"}>一時停止中です。タイマーは進みません。</p><section class="card"><p class="prompt">${esc(prompt)}</p><p class="hint" id="hint"></p>${study.phase === "question" ? `<form id="answer-form"><label>あなたの回答<textarea id="answer" autocomplete="off" ${study.paused ? "disabled" : ""}>${esc(study.answer)}</textarea></label><div class="row"><button class="primary" ${study.paused ? "disabled" : ""}>回答を確認</button><button type="button" id="skip" ${study.paused ? "disabled" : ""}>スキップ</button></div></form>` : evaluation()}</section><p class="muted">${study.retried ? "再挑戦中：前の間違いの記録は残ります。" : "日本語は自己判定。英語も言い換えの場合は自己判定できます。"}</p><button id="finish" class="danger">ここで終了して結果を見る</button></div>`;
+  app.innerHTML = `<div class="learning">${title("学習", `${study.index + 1} / ${study.queue.length} 問 · ${type(item)} ${item.number} · セクション ${item.section} · ${study.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"}`)}<div class="row between"><span id="timer" aria-live="off"></span><button id="pause">${study.paused ? "再開" : "一時停止"}</button></div><p id="paused" ${study.paused ? "" : "hidden"}>一時停止中です。タイマーは進みません。</p><section class="card"><p class="prompt">${esc(prompt)}</p><p class="hint" id="hint"></p>${study.phase === "question" ? `<form id="answer-form"><label>あなたの回答<textarea id="answer" lang="${study.direction === "ja-en" ? "en" : "ja"}" autocomplete="off" ${study.paused ? "disabled" : ""}>${esc(study.answer)}</textarea></label><div class="row"><button class="primary" ${study.paused ? "disabled" : ""}>回答を確認</button><button type="button" id="skip" ${study.paused ? "disabled" : ""}>スキップ</button></div></form>` : evaluation()}</section><p class="muted">${study.retried ? "再挑戦中：前の間違いの記録は残ります。" : "日本語は自己判定。英語も言い換えの場合は自己判定できます。"}</p><button id="finish" class="danger">ここで終了して結果を見る</button></div>`;
   $("#pause").onclick = () => {
     if (!study.paused) advanceClock();
     study.paused = !study.paused;
@@ -423,52 +424,95 @@ function sessionHTML(s) {
 }
 function search() {
   app.innerHTML =
-    title("検索・一覧", "番号は例文と単語を区別します。") +
-    `<div class="grid"><label>番号・英語・日本語<input id="query" type="search" placeholder="例: 1 / robot / 月"></label><label>種類<select id="search-kind"><option value="all">すべて</option><option value="sentence">例文</option><option value="word">単語</option><option value="sections">セクション</option></select></label></div><div id="list"></div>`;
+    title("検索・一覧", "例文と単語・熟語を、それぞれの一覧から探せます。") +
+    `<div class="search-tools card"><label>番号・英語・日本語<input id="query" type="search" placeholder="例: 001 / robot / 月"></label><label>種類<select id="search-kind"><option value="all">すべて</option><option value="sentence">例文</option><option value="word">単語・熟語</option><option value="sections">セクション</option></select></label></div><p class="search-summary" role="status" aria-live="polite"></p><div id="list"></div>`;
   const update = () => {
     const q = $("#query").value.trim().toLowerCase(),
       kind = $("#search-kind").value;
-    let items = state.items.filter(
-      (i) =>
-        (kind === "all" || kind === "sections" || i.kind === kind) &&
-        (!q ||
-          [i.number, i.en, i.ja, ...i.aliasesEn, ...i.aliasesJa].some((v) =>
-            String(v).toLowerCase().includes(q),
-          )),
-    );
+    const numberQuery = /^\d+$/.test(q) ? q.replace(/^0+(?=\d)/, "") : q;
+    const matches = (i) =>
+      !q ||
+      String(i.number).includes(numberQuery) ||
+      [i.en, i.ja, ...i.aliasesEn, ...i.aliasesJa].some((v) =>
+        String(v).toLowerCase().includes(q),
+      );
     if (kind === "sections") {
-      const sections = [...new Set(state.items.map((i) => i.section))]
-        .sort((a, b) => a - b)
-        .filter((n) => !q || String(n).includes(q));
+      const registered = [...new Set(state.items.map((i) => i.section))].sort(
+        (a, b) => a - b,
+      );
+      const sections = registered.filter(
+        (n) =>
+          !q ||
+          String(n).includes(numberQuery) ||
+          state.items.some((i) => i.section === n && matches(i)),
+      );
+      $(".search-summary").textContent =
+        `セクション ${sections.length} 件 / 登録済み ${registered.length} 件`;
       $("#list").innerHTML =
-        sections
-          .map(
-            (n) =>
-              `<a class="list-item" href="#section/${n}">セクション ${n} · ${state.items.filter((i) => i.section === n).length} 件</a>`,
-          )
-          .join("") || '<p class="empty">登録済みセクションがありません。</p>';
-    } else
-      $("#list").innerHTML =
-        `<p class="muted">${items.length} 件</p>` +
-          items
-            .sort((a, b) => a.section - b.section || a.number - b.number)
-            .map(itemLink)
-            .join("") || "<p>該当なし</p>";
+        sections.length > 0
+          ? `<div class="library-grid section-grid">${sections
+              .map((n) => {
+                const items = state.items.filter((i) => i.section === n);
+                const sentences = items.filter(
+                  (i) => i.kind === "sentence",
+                ).length;
+                const words = items.filter((i) => i.kind === "word").length;
+                return `<a class="list-item section-card card" href="#section/${n}"><span class="item-number">${String(n).padStart(2, "0")}</span><span class="item-body"><span class="item-en">セクション ${n}</span><span class="item-ja section-counts"><span>例文 ${sentences} 件</span><span>単語・熟語 ${words} 件</span></span><span class="item-meta">登録済み ${items.length} 件</span></span><span class="item-chevron" aria-hidden="true">›</span></a>`;
+              })
+              .join("")}</div>`
+          : `<div class="empty card"><p>${registered.length ? "条件に合うセクションがありません。" : "セクションはまだ登録されていません。"}</p><p class="muted">${registered.length ? "検索する言葉や番号を変えてみてください。" : "問題を登録すると、セクションごとの一覧を表示します。"}</p></div>`;
+      return;
+    }
+    const kinds = kind === "all" ? ["sentence", "word"] : [kind];
+    const registered = state.items.filter((i) => kinds.includes(i.kind));
+    const items = registered.filter(matches);
+    $(".search-summary").textContent =
+      `検索結果 ${items.length} 件 / 登録済み ${registered.length} 件`;
+    $("#list").innerHTML = libraryGroups(items, kinds, registered);
   };
   $("#query").oninput = update;
   $("#search-kind").onchange = update;
   update();
 }
+function libraryGroups(
+  items,
+  kinds = ["sentence", "word"],
+  registered = items,
+) {
+  return `<div class="library-grid${kinds.length === 1 ? " library-grid-single" : ""}">${kinds
+    .map((kind) => {
+      const label = kind === "sentence" ? "例文" : "単語・熟語";
+      const rows = items
+        .filter((i) => i.kind === kind)
+        .sort((a, b) => a.section - b.section || a.number - b.number);
+      const total = registered.filter((i) => i.kind === kind).length;
+      return `<section class="library-group" data-kind="${kind}" aria-labelledby="library-${kind}-title"><div class="library-heading"><h2 id="library-${kind}-title">${label}</h2><span class="library-count">${rows.length} / ${total} 件</span></div><div class="library-items">${
+        rows.length
+          ? rows.map(itemLink).join("")
+          : `<div class="empty"><p>${total ? `条件に合う${label}がありません。` : `${label}はまだ登録されていません。`}</p><p class="muted">${total ? "検索する言葉や番号を変えてみてください。" : "データ画面から問題を登録できます。"}</p></div>`
+      }</div></section>`;
+    })
+    .join("")}</div>`;
+}
 function itemLink(i) {
-  return `<a class="list-item" href="#detail/${i.kind}/${i.number}"><span class="badge">${type(i)} ${i.number}</span> <small>セクション ${i.section} ${i.favorite ? "★" : ""} ${i.review ? "要復習" : ""}</small><p>${esc(i.en)}</p><small>${esc(i.ja)}</small></a>`;
+  const metadata = [
+    `セクション ${i.section}`,
+    i.kind === "word" ? i.partOfSpeech : "",
+    i.favorite ? "★ お気に入り" : "",
+    i.review ? "要復習" : "",
+  ].filter(Boolean);
+  return `<a class="list-item" href="#detail/${i.kind}/${i.number}"><span class="item-number">${type(i)}${String(i.number).padStart(3, "0")}</span><span class="item-body"><span class="item-en">${esc(i.en)}</span><span class="item-ja">${esc(i.ja)}</span><span class="item-meta">${esc(metadata.join(" · "))}</span></span><span class="item-chevron" aria-hidden="true">›</span></a>`;
 }
 function section(n) {
+  const items = state.items.filter((i) => String(i.section) === String(n));
+  const sentences = items.filter((i) => i.kind === "sentence").length;
+  const words = items.filter((i) => i.kind === "word").length;
   app.innerHTML =
-    title(`セクション ${esc(n)}`) +
-    state.items
-      .filter((i) => String(i.section) === n)
-      .map(itemLink)
-      .join("") +
+    title(
+      `セクション ${esc(n)}`,
+      `例文 ${sentences} 件 · 単語・熟語 ${words} 件`,
+    ) +
+    libraryGroups(items) +
     link("search", "一覧へ");
 }
 function detail(kind, number) {
@@ -620,11 +664,11 @@ function progress() {
               return attempts.filter((a) => day(a.at) === day(t)).length;
             }),
           );
-        return `<div class="chart-row"><span>${label.slice(5)}</span><div class="bar" aria-label="${label}: ${n}問"><span style="width:${(n / max) * 100}%;background:#bded99"></span></div><span>${n} 問</span></div>`;
+        return `<div class="chart-row"><span>${label.slice(5)}</span><div class="bar" aria-label="${label}: ${n}問"><span style="width:${(n / max) * 100}%;background:#3678e9"></span></div><span>${n} 問</span></div>`;
       },
     ).join(
       "",
-    )}</section><section class="card"><h2>3段階評価の割合</h2><div class="bar" role="img" aria-label="${ratings.map((r, i) => r + " " + counts[i] + "件").join("、")}">${counts.map((n, i) => `<span style="width:${(n / total) * 100}%;background:${["#c57868", "#d8ba79", "#bded99"][i]}"></span>`).join("")}</div><p>${ratings.map((r, i) => `${r} ${counts[i]}件（${Math.round((counts[i] / total) * 100)}%）`).join(" / ")}</p></section><div class="grid">${[
+    )}</section><section class="card"><h2>3段階評価の割合</h2><div class="bar" role="img" aria-label="${ratings.map((r, i) => r + " " + counts[i] + "件").join("、")}">${counts.map((n, i) => `<span style="width:${(n / total) * 100}%;background:${["#c56e7c", "#81a8da", "#3678e9"][i]}"></span>`).join("")}</div><p>${ratings.map((r, i) => `${r} ${counts[i]}件（${Math.round((counts[i] / total) * 100)}%）`).join(" / ")}</p></section><div class="grid">${[
       "sentence",
       "word",
     ]
@@ -783,7 +827,7 @@ function showPreview() {
       }
       importPreview = null;
       data();
-      notify("保存しました。");
+      notify("保存しました。", "success");
     }
   };
 }
@@ -822,7 +866,7 @@ function settings() {
       };
       validateSettings(settings);
       if (await commit((state) => (state.settings = settings)))
-        notify("設定を保存しました。");
+        notify("設定を保存しました。", "success");
     } catch (e) {
       notify(e.message);
     }
@@ -845,6 +889,7 @@ function settings() {
         ok
           ? "永続保存が許可されました。"
           : "永続保存は許可されませんでした。JSONバックアップを利用してください。",
+        ok ? "success" : "error",
       );
     } catch {
       notify("永続保存を利用できません。バックアップを保存してください。");
@@ -853,6 +898,7 @@ function settings() {
 }
 function render() {
   if (!state) return;
+  if (document.querySelector("#notice").dataset.tone === "success") notify("");
   const [route = "home", ...parts] = location.hash.slice(1).split("/");
   if (study && route !== "learn") pauseForLeaving();
   document
