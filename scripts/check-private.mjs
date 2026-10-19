@@ -211,6 +211,7 @@ try {
   await page.reload();
   await page.getByText("4 件登録済み").waitFor();
   await page.getByRole("link", { name: "検索", exact: true }).click();
+  await page.getByRole("button", { name: "単語モード", exact: true }).click();
   await page.getByLabel("番号・英語・日本語").fill("moon");
   assert.match(await page.locator("#list").textContent(), /月の庭/);
   await page.getByRole("link", { name: "学習", exact: true }).click();

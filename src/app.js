@@ -1,4 +1,5 @@
 import "./style.css";
+import { installSwipeNavigation } from "./swipe.js";
 import {
   defaults,
   emptyState,
@@ -37,6 +38,13 @@ let state,
   study = null,
   importPreview = null,
   lastResult = null;
+const browse = { kind: "sentence", section: null, query: "" };
+let activeNavigation = null;
+let detailNavigationFocus = null;
+installSwipeNavigation(app, {
+  previous: () => activeNavigation?.previous() ?? false,
+  next: () => activeNavigation?.next() ?? false,
+});
 let options = {
   kind: "sentence",
   direction: "en-ja",
@@ -422,77 +430,116 @@ function sessionHTML(s) {
   const a = s.attempts;
   return `<section class="card"><h2>${fmt(s.started)}</h2><p>${s.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"} · ${a.length} 回答 · ${new Set(a.map(identity)).size} 問 · ${s.ended ? "終了" : "途中終了／進行中"}</p><p>正解 ${a.filter((x) => x.correctness === "correct").length} / 不正解 ${a.filter((x) => x.correctness === "incorrect").length} / 保留 ${a.filter((x) => x.correctness === "unknown").length} / スキップ ${a.filter((x) => x.correctness === "skip").length} / 時間切れ ${a.filter((x) => x.correctness === "timeout").length}</p>${a.map((x) => `<details><summary>${type(x)} ${x.number} · ${ratings[x.rating]} · ${{ correct: "正解", incorrect: "不正解", unknown: "保留", skip: "スキップ", timeout: "時間切れ" }[x.correctness]} ${x.retry ? "（再挑戦）" : ""}</summary><p>${fmt(x.at)} · セクション ${x.section} · ヒント ${x.hints} 文字</p><p>問題: ${esc(x.prompt)}</p><p>回答: ${esc(x.answer || "（未回答）")}</p><p>正解: ${esc(x.correctAnswer)}</p></details>`).join("")}</section>`;
 }
-function search() {
-  app.innerHTML =
-    title("検索・一覧", "例文と単語・熟語を、それぞれの一覧から探せます。") +
-    `<div class="search-tools card"><label>番号・英語・日本語<input id="query" type="search" placeholder="例: 001 / robot / 月"></label><label>種類<select id="search-kind"><option value="all">すべて</option><option value="sentence">例文</option><option value="word">単語・熟語</option><option value="sections">セクション</option></select></label></div><p class="search-summary" role="status" aria-live="polite"></p><div id="list"></div>`;
-  const update = () => {
-    const q = $("#query").value.trim().toLowerCase(),
-      kind = $("#search-kind").value;
-    const numberQuery = /^\d+$/.test(q) ? q.replace(/^0+(?=\d)/, "") : q;
-    const matches = (i) =>
-      !q ||
-      String(i.number).includes(numberQuery) ||
-      [i.en, i.ja, ...i.aliasesEn, ...i.aliasesJa].some((v) =>
-        String(v).toLowerCase().includes(q),
-      );
-    if (kind === "sections") {
-      const registered = [...new Set(state.items.map((i) => i.section))].sort(
-        (a, b) => a - b,
-      );
-      const sections = registered.filter(
-        (n) =>
-          !q ||
-          String(n).includes(numberQuery) ||
-          state.items.some((i) => i.section === n && matches(i)),
-      );
-      $(".search-summary").textContent =
-        `セクション ${sections.length} 件 / 登録済み ${registered.length} 件`;
-      $("#list").innerHTML =
-        sections.length > 0
-          ? `<div class="library-grid section-grid">${sections
-              .map((n) => {
-                const items = state.items.filter((i) => i.section === n);
-                const sentences = items.filter(
-                  (i) => i.kind === "sentence",
-                ).length;
-                const words = items.filter((i) => i.kind === "word").length;
-                return `<a class="list-item section-card card" href="#section/${n}"><span class="item-number">${String(n).padStart(2, "0")}</span><span class="item-body"><span class="item-en">セクション ${n}</span><span class="item-ja section-counts"><span>例文 ${sentences} 件</span><span>単語・熟語 ${words} 件</span></span><span class="item-meta">登録済み ${items.length} 件</span></span><span class="item-chevron" aria-hidden="true">›</span></a>`;
-              })
-              .join("")}</div>`
-          : `<div class="empty card"><p>${registered.length ? "条件に合うセクションがありません。" : "セクションはまだ登録されていません。"}</p><p class="muted">${registered.length ? "検索する言葉や番号を変えてみてください。" : "問題を登録すると、セクションごとの一覧を表示します。"}</p></div>`;
+function search(requestedSection) {
+  if (requestedSection !== undefined) {
+    const n = Number(requestedSection);
+    if (!state.items.some((i) => i.section === n)) {
+      activeNavigation = null;
+      app.innerHTML =
+        title(
+          `セクション ${esc(requestedSection)}`,
+          "このセクションはまだ登録されていません。",
+        ) +
+        '<div class="empty card"><p>登録済みのセクションから選んでください。</p></div>' +
+        link("search", "一覧へ");
       return;
     }
-    const kinds = kind === "all" ? ["sentence", "word"] : [kind];
-    const registered = state.items.filter((i) => kinds.includes(i.kind));
-    const items = registered.filter(matches);
-    $(".search-summary").textContent =
-      `検索結果 ${items.length} 件 / 登録済み ${registered.length} 件`;
-    $("#list").innerHTML = libraryGroups(items, kinds, registered);
+    browse.section = n;
+    browse.query = "";
+  }
+  app.innerHTML =
+    title("検索・一覧", "1セクションずつ、左右にめくって探せます。") +
+    `<div class="browse-modes" role="group" aria-label="表示モード"><button class="browse-mode" data-mode="sentence" aria-pressed="${browse.kind === "sentence"}">例文モード</button><button class="browse-mode" data-mode="word" aria-pressed="${browse.kind === "word"}">単語モード</button></div><div class="search-tools card"><label>番号・英語・日本語<input id="query" type="search" placeholder="選んだモードの全セクションから検索" value="${esc(browse.query)}"></label></div><p class="search-summary" role="status" aria-live="polite"></p><section class="section-browser card" aria-label="セクションごとの一覧"><div class="section-controls"><button id="section-previous" aria-label="前のセクション">← 前へ</button><span class="section-position" aria-label="セクションの位置"></span><button id="section-next" aria-label="次のセクション">次へ →</button></div><div class="section-tabs" role="group" aria-label="セクションを選択"></div><p class="section-hint muted">一覧を左右にスワイプするとセクションが変わります。</p><div id="list"></div></section>`;
+  let sections = [];
+  const move = (step) => {
+    const index = sections.indexOf(browse.section);
+    const next = sections[index + step];
+    if (index < 0 || next === undefined) return false;
+    const tabHadFocus = document.activeElement?.closest(".section-tabs");
+    browse.section = next;
+    update();
+    if (tabHadFocus)
+      $(`[data-section="${browse.section}"]`)?.focus({ preventScroll: true });
+    return true;
   };
-  $("#query").oninput = update;
-  $("#search-kind").onchange = update;
+  const update = () => {
+    const q = browse.query.trim().toLowerCase();
+    const numberQuery = /^\d+$/.test(q) ? q.replace(/^0+(?=\d)/, "") : q;
+    const registered = state.items.filter((i) => i.kind === browse.kind);
+    const matches = registered.filter(
+      (i) =>
+        !q ||
+        String(i.number).includes(numberQuery) ||
+        [i.en, i.ja, ...i.aliasesEn, ...i.aliasesJa].some((v) =>
+          String(v).toLowerCase().includes(q),
+        ),
+    );
+    sections = [
+      ...new Set((q ? matches : state.items).map((i) => i.section)),
+    ].sort((a, b) => a - b);
+    if (!sections.includes(browse.section))
+      browse.section = sections[0] ?? null;
+    const index = sections.indexOf(browse.section);
+    const label = browse.kind === "sentence" ? "例文" : "単語・熟語";
+    const rows = matches
+      .filter((i) => i.section === browse.section)
+      .sort((a, b) => a.number - b.number);
+    const total = registered.filter((i) => i.section === browse.section).length;
+    app
+      .querySelectorAll("[data-mode]")
+      .forEach((button) =>
+        button.setAttribute(
+          "aria-pressed",
+          String(button.dataset.mode === browse.kind),
+        ),
+      );
+    $(".search-summary").textContent =
+      `検索結果 ${matches.length} 件 / 登録済み ${registered.length} 件`;
+    $(".section-position").textContent = `${index + 1} / ${sections.length}`;
+    $("#section-previous").disabled = index <= 0;
+    $("#section-next").disabled = index < 0 || index >= sections.length - 1;
+    $(".section-tabs").innerHTML = sections
+      .map(
+        (n) =>
+          `<button data-section="${n}" aria-label="セクション ${n}"${n === browse.section ? ' aria-current="true"' : ""}>SECTION ${String(n).padStart(2, "0")}</button>`,
+      )
+      .join("");
+    app.querySelectorAll("[data-section]").forEach((button) => {
+      button.onclick = () => {
+        browse.section = Number(button.dataset.section);
+        update();
+        $(`[data-section="${browse.section}"]`)?.focus({ preventScroll: true });
+      };
+    });
+    const tabs = $(".section-tabs");
+    const selected = tabs.querySelector('[aria-current="true"]');
+    if (selected)
+      tabs.scrollLeft =
+        selected.offsetLeft -
+        tabs.offsetLeft -
+        (tabs.clientWidth - selected.offsetWidth) / 2;
+    const empty = !registered.length
+      ? `${label}はまだ登録されていません。`
+      : q
+        ? `条件に合う${label}がありません。`
+        : `このセクションの${label}はまだ登録されていません。`;
+    $("#list").innerHTML =
+      `<section class="section-stage library-group" data-kind="${browse.kind}" data-swipe-surface aria-label="${browse.section === null ? "検索結果" : `セクション ${browse.section}の${label}`}" aria-live="polite"><div class="section-heading"><h2>${browse.section === null ? "検索結果" : `セクション ${browse.section}`}</h2><span class="library-count">${rows.length} / ${total} 件</span></div><div class="library-items">${rows.length ? rows.map(itemLink).join("") : `<div class="empty"><p>${empty}</p><p class="muted">${q ? "検索する言葉や番号を変えてみてください。" : "ほかのセクション・モードを選ぶか、データ画面から登録できます。"}</p></div>`}</div></section>`;
+    activeNavigation = { previous: () => move(-1), next: () => move(1) };
+  };
+  $("#query").oninput = () => {
+    browse.query = $("#query").value;
+    update();
+  };
+  app.querySelectorAll("[data-mode]").forEach((button) => {
+    button.onclick = () => {
+      browse.kind = button.dataset.mode;
+      update();
+    };
+  });
+  $("#section-previous").onclick = () => move(-1);
+  $("#section-next").onclick = () => move(1);
   update();
-}
-function libraryGroups(
-  items,
-  kinds = ["sentence", "word"],
-  registered = items,
-) {
-  return `<div class="library-grid${kinds.length === 1 ? " library-grid-single" : ""}">${kinds
-    .map((kind) => {
-      const label = kind === "sentence" ? "例文" : "単語・熟語";
-      const rows = items
-        .filter((i) => i.kind === kind)
-        .sort((a, b) => a.section - b.section || a.number - b.number);
-      const total = registered.filter((i) => i.kind === kind).length;
-      return `<section class="library-group" data-kind="${kind}" aria-labelledby="library-${kind}-title"><div class="library-heading"><h2 id="library-${kind}-title">${label}</h2><span class="library-count">${rows.length} / ${total} 件</span></div><div class="library-items">${
-        rows.length
-          ? rows.map(itemLink).join("")
-          : `<div class="empty"><p>${total ? `条件に合う${label}がありません。` : `${label}はまだ登録されていません。`}</p><p class="muted">${total ? "検索する言葉や番号を変えてみてください。" : "データ画面から問題を登録できます。"}</p></div>`
-      }</div></section>`;
-    })
-    .join("")}</div>`;
 }
 function itemLink(i) {
   const metadata = [
@@ -504,18 +551,10 @@ function itemLink(i) {
   return `<a class="list-item" href="#detail/${i.kind}/${i.number}"><span class="item-number">${type(i)}${String(i.number).padStart(3, "0")}</span><span class="item-body"><span class="item-en">${esc(i.en)}</span><span class="item-ja">${esc(i.ja)}</span><span class="item-meta">${esc(metadata.join(" · "))}</span></span><span class="item-chevron" aria-hidden="true">›</span></a>`;
 }
 function section(n) {
-  const items = state.items.filter((i) => String(i.section) === String(n));
-  const sentences = items.filter((i) => i.kind === "sentence").length;
-  const words = items.filter((i) => i.kind === "word").length;
-  app.innerHTML =
-    title(
-      `セクション ${esc(n)}`,
-      `例文 ${sentences} 件 · 単語・熟語 ${words} 件`,
-    ) +
-    libraryGroups(items) +
-    link("search", "一覧へ");
+  search(n);
 }
 function detail(kind, number) {
+  activeNavigation = null;
   const item = state.items.find(
     (i) => i.kind === kind && i.number === Number(number),
   );
@@ -523,9 +562,30 @@ function detail(kind, number) {
     app.innerHTML = title("未登録の問題です") + link("search", "一覧へ");
     return;
   }
+  browse.kind = kind;
+  browse.section = item.section;
+  const items = state.items
+    .filter((i) => i.kind === kind)
+    .sort((a, b) => a.number - b.number);
+  const index = items.findIndex((i) => identity(i) === identity(item));
+  const move = (step) => {
+    const target = items[index + step];
+    if (!target) return false;
+    detailNavigationFocus = document.activeElement?.matches(
+      "#detail-previous, #detail-next",
+    )
+      ? document.activeElement.id
+      : null;
+    location.hash = `detail/${target.kind}/${target.number}`;
+    return true;
+  };
+  activeNavigation = { previous: () => move(-1), next: () => move(1) };
   app.innerHTML =
-    title(`${type(item)} ${item.number}`, `セクション ${item.section}`) +
-    `<section class="card"><p class="prompt">${esc(item.en)}</p><p>${esc(item.ja)}</p><dl>${[
+    title(
+      `${type(item)} ${item.number}`,
+      `セクション ${item.section} · 左右にスワイプして前後の${type(item)}へ`,
+    ) +
+    `<div class="detail-navigation"><button id="detail-previous" aria-label="前の${type(item)}" ${index === 0 ? "disabled" : ""}>← 前へ</button><span id="detail-position" class="section-position">${index + 1} / ${items.length}</span><button id="detail-next" aria-label="次の${type(item)}" ${index === items.length - 1 ? "disabled" : ""}>次へ →</button></div><section class="card focus-card" data-swipe-surface aria-label="${type(item)} ${item.number}の詳細"><p class="prompt">${esc(item.en)}</p><p>${esc(item.ja)}</p><dl>${[
       ["別解（英語）", item.aliasesEn.join(" / ")],
       ["別解（日本語）", item.aliasesJa.join(" / ")],
       ["品詞", item.partOfSpeech],
@@ -547,6 +607,17 @@ function detail(kind, number) {
         return `<section class="card"><h2>${d === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"}</h2><p>${r ? ratings[r.rating] : "未学習"}</p>${r ? `<p>復習予定 ${fmt(r.due)}</p><p>${r.attempts} 回答 / 間違い ${r.mistakes} 回</p>` : ""}</section>`;
       })
       .join("")}</div>${link("search", "一覧へ")}`;
+  $("#detail-previous").onclick = () => move(-1);
+  $("#detail-next").onclick = () => move(1);
+  if (detailNavigationFocus) {
+    const control = $("#" + detailNavigationFocus);
+    const target = control?.disabled ? $("h1") : control;
+    if (target) {
+      if (target.tagName === "H1") target.tabIndex = -1;
+      target.focus({ preventScroll: true });
+    }
+    detailNavigationFocus = null;
+  }
   for (const f of ["favorite", "review"])
     $("#" + f).onclick = async () => {
       if (
@@ -554,8 +625,10 @@ function detail(kind, number) {
           const i = s.items.find((x) => identity(x) === identity(item));
           i[f] = !i[f];
         })
-      )
+      ) {
         detail(kind, number);
+        $("#" + f)?.focus({ preventScroll: true });
+      }
     };
 }
 function edit(kind, number) {
@@ -899,11 +972,14 @@ function settings() {
 function render() {
   if (!state) return;
   if (document.querySelector("#notice").dataset.tone === "success") notify("");
+  activeNavigation = null;
   const [route = "home", ...parts] = location.hash.slice(1).split("/");
+  const navRoute = ["detail", "section"].includes(route) ? "search" : route;
+  if (route !== "detail") detailNavigationFocus = null;
   if (study && route !== "learn") pauseForLeaving();
   document
     .querySelectorAll("nav a")
-    .forEach((a) => a.classList.toggle("active", a.hash === "#" + route));
+    .forEach((a) => a.classList.toggle("active", a.hash === "#" + navRoute));
   (
     ({
       home,
@@ -922,6 +998,32 @@ function render() {
   window.scrollTo(0, 0);
 }
 window.addEventListener("hashchange", render);
+document.addEventListener("keydown", (event) => {
+  if (
+    !activeNavigation ||
+    event.defaultPrevented ||
+    event.isComposing ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey ||
+    window.getSelection()?.isCollapsed === false
+  )
+    return;
+  if (
+    event.target.closest(
+      'input, textarea, select, [contenteditable]:not([contenteditable="false"]), nav, [data-no-swipe]',
+    )
+  )
+    return;
+  const action =
+    event.key === "ArrowLeft"
+      ? "previous"
+      : event.key === "ArrowRight"
+        ? "next"
+        : null;
+  if (action && activeNavigation[action]()) event.preventDefault();
+});
 document.addEventListener("click", (event) => {
   const anchor = event.target.closest('a[href^="#"]');
   if (anchor && anchor.hash !== "#learn") pauseForLeaving();

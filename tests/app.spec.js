@@ -41,6 +41,7 @@ test("オフラインで再読み込み・検索・4方向学習・履歴保存�
   await page.reload();
   await expect(page.getByText("4 件登録済み")).toBeVisible();
   await page.getByRole("link", { name: "検索", exact: true }).click();
+  await page.getByRole("button", { name: "単語モード", exact: true }).click();
   await page.getByLabel("番号・英語・日本語").fill("moon");
   await expect(page.locator("#list")).toContainText("月の庭");
   await page.locator("#list a").click();
@@ -162,6 +163,7 @@ test("取込検証・CSV登録・編集・追加統合と置換復元", async ({
   await page.getByRole("button", { name: "この内容を登録" }).click();
   await expect(page.getByText("2 件登録済み")).toBeVisible();
   await page.getByRole("link", { name: "検索", exact: true }).click();
+  await page.getByRole("button", { name: "単語モード", exact: true }).click();
   await page.getByLabel("番号・英語・日本語").fill("test");
   await page.locator("#list a").click();
   await page.getByRole("link", { name: "編集", exact: true }).click();
