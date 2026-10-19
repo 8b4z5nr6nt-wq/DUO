@@ -29,12 +29,22 @@ function setup({
   tokenBody,
   tokenStatus = 200,
   profileBody,
+  tokenRedirect = false,
+  profileRedirect = false,
 } = {}) {
   const calls = [];
   let fetched = 0;
   const handler = createHandler(async (url, options) => {
     calls.push({ url, options });
     if (networkError) throw Error("simulated network failure");
+    if (
+      (tokenRedirect && url.endsWith("/access_token")) ||
+      (profileRedirect && url === "https://api.github.com/user")
+    )
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "https://fictional-untrusted.invalid/" },
+      });
     if (url.endsWith("/access_token"))
       return Response.json(
         tokenBody ??
@@ -230,7 +240,8 @@ test("本人確認成功後だけセッションを発行し、GitHubトーク�
     createHash("sha256").update(body.get("code_verifier")).digest("base64url"),
     start.url.searchParams.get("code_challenge"),
   );
-  assert.equal(s.calls[0].options.redirect, "error");
+  assert.equal(s.calls[0].options.redirect, "manual");
+  assert.equal(s.calls[1].options.redirect, "manual");
   assert.equal(s.calls[1].url, "https://api.github.com/user");
   assert.equal(
     s.calls[1].options.headers.Authorization,
@@ -401,6 +412,25 @@ test("通信障害・権限不一致・プロフィール取得失敗・他人�
   ]) {
     const s = setup(options);
     await assertLoginFailure(await finish(s, await begin(s)), code);
+    assert.equal(s.fetched, 0);
+  }
+});
+test("GitHubのリダイレクトは追わず、Secretやトークンを別ホストへ渡さない", async () => {
+  for (const [options, code, count] of [
+    [{ tokenRedirect: true }, "DUO-A07", 1],
+    [{ profileRedirect: true }, "DUO-A09", 2],
+  ]) {
+    const s = setup(options);
+    await assertLoginFailure(await finish(s, await begin(s)), code);
+    assert.equal(s.calls.length, count);
+    assert.ok(s.calls.every((call) => call.options.redirect === "manual"));
+    assert.deepEqual(
+      s.calls.map((call) => call.url),
+      [
+        "https://github.com/login/oauth/access_token",
+        "https://api.github.com/user",
+      ].slice(0, count),
+    );
     assert.equal(s.fetched, 0);
   }
 });

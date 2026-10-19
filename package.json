@@ -12,6 +12,7 @@
     "test:pages": "node scripts/check-pages.mjs",
     "cloudflare:check": "wrangler deploy --dry-run --outdir /tmp/duo-worker-build",
     "test:private": "node scripts/check-private.mjs",
+    "test:oauth-runtime": "node scripts/check-oauth-runtime.mjs",
     "deploy:private": "node scripts/deploy-private.mjs"
   },
   "devDependencies": {

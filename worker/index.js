@@ -259,7 +259,8 @@ export function createHandler(fetchGithub = fetch) {
             "https://github.com/login/oauth/access_token",
             {
               method: "POST",
-              redirect: "error",
+              // Workers supports manual/follow, but rejects redirect: "error" before sending.
+              redirect: "manual",
               signal: AbortSignal.timeout(10000),
               headers: {
                 Accept: "application/json",
@@ -274,6 +275,8 @@ export function createHandler(fetchGithub = fetch) {
               }),
             },
           );
+          if (exchange.status >= 300 && exchange.status < 400)
+            throw Error("token exchange redirect refused");
           const token = await exchange.json();
           // Allowlist GitHub's error identifiers. Never display raw provider data.
           if (token.error) {
@@ -306,7 +309,7 @@ export function createHandler(fetchGithub = fetch) {
             throw Error("unexpected token permissions");
           failure = "DUO-A09";
           const profile = await fetchGithub("https://api.github.com/user", {
-            redirect: "error",
+            redirect: "manual",
             signal: AbortSignal.timeout(10000),
             headers: {
               Accept: "application/vnd.github+json",

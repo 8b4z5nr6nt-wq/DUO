@@ -101,6 +101,7 @@ Safariで `/auth/login` を開いて最初からやり直します。GitHubか�
 
 - OAuthのstateとPKCE（S256）を使い、別ブラウザの認証結果を取り込まないようにします。認証途中のCookieは10分で期限切れです。
 - GitHubのトークン交換はWorkerからHTTPSで行います。Client Secretをブラウザへ配信しません。GitHubのアクセストークンは本人のプロフィール取得時だけに使い、その後保存しません。
+- GitHubへの2種類の通信には、Workersが対応する `redirect: "manual"` を使い、リダイレクト先へSecretやトークンを送りません。トークン交換の3xx応答とプロフィール取得の非成功応答は拒否します。Workersでは `redirect: "error"` を指定すると送信前に例外になるため、この指定は使いません。
 - アプリ自身が作るログインCookieは `__Host-` / HttpOnly / Secure / SameSite=Lax、署名・用途・発行者・配信URL・本人ID・期限を検証します。オンラインのログイン期間は7日です。Secret変更で既存セッションを無効にできます。
 - `/auth/*` はService Workerでキャッシュせず、ログイン・コールバック・ログアウトを常にネットワークへ送ります。認証ページをオフラインのアプリとして保存しません。
 - 公開鍵取得やZero Trustの支払い契約は不要です。KV・R2・D1などの追加ストレージも使いません。
@@ -122,13 +123,15 @@ npm test
 npm run build
 npm run cloudflare:check
 npm run deploy:private -- --dry-run
+npm run test:oauth-runtime
 npm run test:pages
 npm run test:private
 ```
 
-- 学習ロジック6件、認証フロー・設定診断13件、配信時のSecret保護5件、合計24件の単体テスト。GitHubの応答は架空のものに置き換え、本人のみ許可・state・PKCE・最小権限・期限・偽造・他人・外部障害・CSRF、設定診断で値を漏らさないことを確認します。ログイン失敗の分類はHTTP成功／失敗の両方、任意のGitHubエラー文が画面に出ないこと、再試行リンクとCookieの破棄も確認します。配信テストは架空のSecretとローカルの子プロセスを使い、実際のPOSIXパイプで値が届くこと、引数・子の環境・出力に漏れないこと、設定不足・起動失敗・配信失敗で停止することを確認します。
+- 学習ロジック6件、認証フロー・設定診断14件、配信時のSecret保護5件、合計25件の単体テスト。GitHubの応答は架空のものに置き換え、本人のみ許可・state・PKCE・最小権限・期限・偽造・他人・外部障害・CSRF、設定診断で値を漏らさないことを確認します。ログイン失敗の分類はHTTP成功／失敗の両方、任意のGitHubエラー文が画面に出ないこと、再試行リンクとCookieの破棄、リダイレクトを追わないことも確認します。配信テストは架空のSecretとローカルの子プロセスを使い、実際のPOSIXパイプで値が届くこと、引数・子の環境・出力に漏れないこと、設定不足・起動失敗・配信失敗で停止することを確認します。
 - `cloudflare:check` は配信せず、Workerをローカルでビルドします。
 - `deploy:private -- --dry-run` も配信しません。Secretは不要で、環境にあっても子へ渡さず、CloudflareへのSecret送信・アップロードを行いません。実配信のラッパーはCloudflare BuildsのLinux環境向けです。機密保護のためWranglerの生ログは表示せず、固定の完了・失敗メッセージを出します。
+- `test:oauth-runtime` は、Cloudflareと同じworkerd実行環境でログイン開始からCookie発行・本人用ファイルの配信までを確認します。GitHubの応答だけをローカルで置き換え、実際の `fetch` とPOST本文、PKCE、トークン交換先・プロフィール取得先のリダイレクト拒否、GitHubの設定エラーと本人以外の拒否を検証します。外部へ通信せず、認証情報は架空です。Node.js側で `fetch` 自体を置き換える単体テストでは検出できなかった、Workersで未対応の通信オプションを検出します。
 - `test:pages` はサブディレクトリでのPWA検証で、Web公開はしません。
 - `test:private` は実際のローカルWorkers実行環境を一時HTTPSで起動し、未認証の全ファイルを拒否すること、認証エラー画面と再試行リンクを表示すること、試験用の署名済み本人Cookieでアプリを開けること、オフラインの検索・学習・履歴保存、認証URLをキャッシュしないことをChromiumで確認します。TLSは一時生成した試験証明書を限定して信頼し、外部通信の検証を無効にしません。
 
@@ -145,3 +148,4 @@ npm run test:private
 - [GitHub OAuthとPKCE](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)
 - [GitHub OAuthの最小権限](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)
 - [GitHubのトークン交換エラー](https://docs.github.com/en/apps/oauth-apps/maintaining-oauth-apps/troubleshooting-oauth-app-access-token-request-errors)
+- [WorkersのRequestとリダイレクトの制約](https://developers.cloudflare.com/workers/runtime-apis/request/)
