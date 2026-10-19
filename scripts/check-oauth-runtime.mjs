@@ -161,6 +161,10 @@ try {
     const authorize = new URL(started.headers.get("Location"));
     assert.equal(authorize.origin, "https://github.com");
     assert.equal(authorize.pathname, "/login/oauth/authorize");
+    assert.equal(
+      authorize.searchParams.get("client_id"),
+      bindings.GITHUB_CLIENT_ID,
+    );
     assert.equal(authorize.searchParams.get("scope"), "");
     assert.equal(authorize.searchParams.get("code_challenge_method"), "S256");
     assert.equal(
