@@ -49,6 +49,17 @@ Client Secret・パスワード・確認コードはチャット、README、GitH
 
 古い `ACCESS_TEAM_URL` / `ACCESS_AUD` / `ACCESS_OWNER_EMAIL` がある場合、新しい配信処理では使用しません。`keep_vars: true` で設定は再配信時にも保持されます。
 
+#### 「設定が未完了」と表示される場合
+
+新しい配信処理は、確認が必要な設定の**名前だけ**を表示します。Secretや設定値そのものは表示しません。表示された設定名を確認してください。
+
+- `GITHUB_CLIENT_SECRET（未登録）`：Workerの **Settings → Variables and Secrets** に、種類 **Secret**・名前 **GITHUB_CLIENT_SECRET** で登録し、保存してデプロイします。**Settings → Build → Variables**などのビルド用変数では、実行中のWorkerへ届きません。
+- Secretの形式を確認する表示：Client IDではなく、GitHubの **Generate a new client secret** で生成したSecretかを、利用者自身の画面で確認します。Secretの値をチャットやスクリーンショットへ送る必要はありません。
+- `APP_ORIGIN` / `GITHUB_OWNER_ID` / `GITHUB_CLIENT_ID`：コード側に設定済みなので、GitHub連携の配信対象が `main` で最新ビルドが成功しているかを確認します。
+- 具体的な設定名が出ない古い表示のままなら、Cloudflareの最新ビルドと再配信を確認し、ページを再読み込みします。
+
+「設定が未完了」は値が未登録・形式不正であることを示し、Secretの値がGitHubの登録と一致しているかまでは判定しません。ここを通過した後の認証エラーは別途確認します。
+
 ### 4. 配信・本人確認
 
 CloudflareのGitHub連携で非公開DUOの `main` を使い、ビルドコマンド `npm run build`、配信コマンド `npx wrangler deploy` で再配信します。Worker名は `duo-private` です。この方法で新しく有料プランを選ぶ必要はありません。
@@ -83,7 +94,7 @@ npm run test:pages
 npm run test:private
 ```
 
-- 学習ロジック6件と、認証フロー9件の単体テスト。GitHubの応答は架空のものに置き換え、本人のみ許可・state・PKCE・最小権限・期限・偽造・他人・外部障害・CSRFを確認します。
+- 学習ロジック6件と、認証フロー・設定診断10件の単体テスト。GitHubの応答は架空のものに置き換え、本人のみ許可・state・PKCE・最小権限・期限・偽造・他人・外部障害・CSRF、設定診断で値を漏らさないことを確認します。
 - `cloudflare:check` は配信せず、Workerをローカルでビルドします。
 - `test:pages` はサブディレクトリでのPWA検証で、Web公開はしません。
 - `test:private` は実際のローカルWorkers実行環境を一時HTTPSで起動し、未認証の全ファイルを拒否すること、試験用の署名済み本人Cookieでアプリを開けること、オフラインの検索・学習・履歴保存、認証URLをキャッシュしないことをChromiumで確認します。TLSは一時生成した試験証明書を限定して信頼し、外部通信の検証を無効にしません。

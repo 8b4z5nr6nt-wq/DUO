@@ -7,27 +7,37 @@ const STATE_SECONDS = 10 * 60;
 const encoder = new TextEncoder();
 
 function configuration(env) {
+  const issues = [];
+  let origin;
   try {
-    const origin = new URL(env.APP_ORIGIN);
-    const id = String(env.GITHUB_OWNER_ID || "");
-    const client = String(env.GITHUB_CLIENT_ID || "");
-    const secret = String(env.GITHUB_CLIENT_SECRET || "");
+    origin = new URL(env.APP_ORIGIN);
     if (
       origin.protocol !== "https:" ||
       origin.pathname !== "/" ||
       origin.search ||
       origin.hash ||
       origin.username ||
-      origin.password ||
-      !/^[1-9]\d*$/.test(id) ||
-      !client ||
-      secret.length < 32
+      origin.password
     )
-      return null;
-    return { origin: origin.origin, id, client, secret };
+      issues.push("APP_ORIGIN（配信URLの形式を確認）");
   } catch {
-    return null;
+    issues.push("APP_ORIGIN（未登録、またはURLの形式が不正）");
   }
+  const id = String(env.GITHUB_OWNER_ID || "");
+  const client = String(env.GITHUB_CLIENT_ID || "");
+  const secret = String(env.GITHUB_CLIENT_SECRET || "");
+  if (!/^[1-9]\d*$/.test(id))
+    issues.push("GITHUB_OWNER_ID（未登録、または数値IDの形式が不正）");
+  if (!client.trim()) issues.push("GITHUB_CLIENT_ID（未登録）");
+  if (!secret) issues.push("GITHUB_CLIENT_SECRET（未登録）");
+  else if (secret.length < 32)
+    issues.push("GITHUB_CLIENT_SECRET（Client Secretの形式を確認）");
+  return {
+    config: issues.length
+      ? null
+      : { origin: origin.origin, id, client, secret },
+    issues,
+  };
 }
 function reply(text, status, headers = {}) {
   return new Response(text, {
@@ -104,10 +114,12 @@ function loginPage() {
 export function createHandler(fetchGithub = fetch) {
   return {
     async fetch(request, env) {
-      const config = configuration(env);
+      const { config, issues } = configuration(env);
       if (!config)
         return reply(
-          "DUOの本人限定ログイン設定が未完了です。配信設定を確認してください。",
+          "DUOの本人限定ログイン設定が未完了です。\n\n確認が必要な設定：\n" +
+            issues.map((name) => "・" + name).join("\n") +
+            "\n\nCloudflareのduo-private → Settings → Variables and Secretsを確認し、保存してデプロイしてください。\nBuild variables（ビルド用変数）への登録だけでは反映されません。",
           503,
         );
       const url = new URL(request.url);

@@ -126,6 +126,45 @@ test("認証未設定と別ホストでは静的ファイルを返さない", as
   );
   assert.equal(s.fetched, 0);
 });
+test("設定エラーは不足している名前だけを表示し、設定値やSecretを漏らさない", async () => {
+  const s = setup();
+  for (const name of [
+    "APP_ORIGIN",
+    "GITHUB_OWNER_ID",
+    "GITHUB_CLIENT_ID",
+    "GITHUB_CLIENT_SECRET",
+  ]) {
+    const env = { ...s.env, [name]: "" };
+    const response = await s.handler.fetch(request("/"), env);
+    assert.equal(response.status, 503);
+    const body = await response.text();
+    assert.match(body, new RegExp(name));
+    assert.match(body, /Variables and Secrets/);
+    assert.match(body, /保存してデプロイ/);
+    for (const other of [
+      "APP_ORIGIN",
+      "GITHUB_OWNER_ID",
+      "GITHUB_CLIENT_ID",
+      "GITHUB_CLIENT_SECRET",
+    ]) {
+      if (other !== name) assert.equal(body.includes(other), false);
+    }
+    assert.equal(body.includes(config.GITHUB_CLIENT_SECRET), false);
+    assert.equal(body.includes(config.GITHUB_CLIENT_ID), false);
+    assert.equal(body.includes(config.APP_ORIGIN), false);
+  }
+  const shortSecret = "fictional-short";
+  const response = await s.handler.fetch(request("/"), {
+    ...s.env,
+    GITHUB_CLIENT_SECRET: shortSecret,
+  });
+  const body = await response.text();
+  assert.equal(response.status, 503);
+  assert.match(body, /GITHUB_CLIENT_SECRET/);
+  assert.equal(body.includes(shortSecret), false);
+  assert.equal(s.fetched, 0);
+  assert.equal(s.calls.length, 0);
+});
 test("未認証のHTML/JS/SW/manifest/アイコンを配信しない", async () => {
   const s = setup();
   for (const path of [
