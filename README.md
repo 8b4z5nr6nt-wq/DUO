@@ -107,6 +107,8 @@ GitHubのコードを非公開に保ち、Cloudflare Workers FreeとGitHubログ
 
 Cloudflareの**ビルド用**に `GITHUB_CLIENT_SECRET` を登録済みの場合は、デプロイコマンドを **`npm run deploy:private`** にします。登録済みの暗号化Secretを、値を表示・ファイル保存せず実行時のWorkerへ渡して配信します。ビルドコマンドは `npm run build` のままです。標準の `npx wrangler deploy` を使う場合は、ビルド用とは別の実行時Secretへの登録が必要です。
 
+ログインに失敗した場合は、日本語の理由と `DUO-A01` などの確認コード、「もう一度GitHubでログイン」のリンクを表示します。Safariの同じタブでやり直してください。問い合わせには確認コードだけを使い、Secretや認証後のURLは送る必要がありません。コードごとの確認方法は[非公開サイトの手順](docs/private-website.md)を参照してください。
+
 ```sh
 npm run build
 npm test
@@ -130,7 +132,7 @@ URL・ドメインが変わる場合は、移行前にJSONバックアップを�
 
 ## 今回の検証結果
 
-- Node.js24.19.0で学習ロジック6件・本人限定ログインと設定診断10件・配信時のSecret保護5件、合計21件の単体テストに成功。
+- Node.js24.19.0で学習ロジック6件・本人限定ログインと設定診断13件・配信時のSecret保護5件、合計24件の単体テストに成功。
 - 架空のSecretを実際のPOSIXパイプとWranglerへ渡す配信前ビルドに成功。値が出力や生成物に含まれないことを確認。Secretを渡さない専用コマンドのdry-runにも成功。
 - 本番ビルドとWorkerの配信前ビルドに成功。
 - Chromiumの3画面サイズでオフライン再読み込み・検索・4方向学習・履歴保存・バックアップを再確認。

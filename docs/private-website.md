@@ -76,6 +76,27 @@ CloudflareのGitHub連携で非公開DUOの `main` を使い、ビルドコマ�
 
 サイトを開くと「GitHubでログイン」が表示されます。GitHubにログインし、専用OAuth Appを承認します。リポジトリやメールを読む権限は要求しません。公開プロフィールの数値IDだけで本人を確認し、一致したらDUOを表示します。他のGitHubアカウントではログイン完了せず、学習ファイルを返しません。
 
+#### 「本人確認ができませんでした」と表示される場合
+
+Safariで `/auth/login` を開いて最初からやり直します。GitHubから戻るまで同じタブを使います。エラー画面には、日本語の理由、固定の確認コード、「もう一度GitHubでログイン」のリンクを表示します。確認を依頼するときは **`DUO-A01` などの確認コードだけ**を伝えれば十分です。認証後のURL、Cookie、Secret、GitHubの応答本文は送信不要です。
+
+| 確認コード | 確認する内容                                                                                         |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
+| `DUO-A01`  | ログイン開始時のCookieがない。同じSafariタブで開始し、途中でブラウザやアプリを切り替えていないか確認 |
+| `DUO-A02`  | 認証の開始情報が不正・期限切れ・別の開始情報と不一致。最初からやり直す                               |
+| `DUO-A03`  | GitHubがClient ID／Client Secretの組合せを拒否。同じOAuth Appの設定か確認                            |
+| `DUO-A04`  | GitHubがコールバックURLを拒否。登録した戻り先と `/auth/callback` を含む配信URLを確認                 |
+| `DUO-A05`  | GitHubの認証コード／PKCE確認が失敗。前の認証結果を再読み込みせず、最初からやり直す                   |
+| `DUO-A06`  | GitHubがメール未確認を通知。GitHub側でメールアドレスを確認する。DUOへのメール登録は不要              |
+| `DUO-A07`  | GitHubとのトークン交換で通信・HTTP・応答形式・その他のエラー                                         |
+| `DUO-A08`  | トークンの形式、または権限がアプリの条件と不一致                                                     |
+| `DUO-A09`  | GitHubのプロフィール取得に失敗                                                                       |
+| `DUO-A10`  | GitHubが返した本人IDが許可されたIDと不一致                                                           |
+| `DUO-A11`  | 承認の取り消し、必要な認証結果の不足、不正なコールバック                                             |
+| `DUO-A12`  | DUOでのログインCookie発行など、その他の処理失敗                                                      |
+
+これらは原因を絞るための分類です。例えば通信失敗とGitHub側の障害は同じコードになるため、コードだけで必ず原因が確定するわけではありません。GitHubの既知のエラー名だけを固定文へ変換し、Secret・トークン・認証コード・state・アカウント情報・任意のエラー文を画面やログへ出しません。本人IDの照合やCookie検証を省略してログインさせる処理はありません。
+
 ## 安全性と保存内容
 
 - OAuthのstateとPKCE（S256）を使い、別ブラウザの認証結果を取り込まないようにします。認証途中のCookieは10分で期限切れです。
@@ -105,11 +126,11 @@ npm run test:pages
 npm run test:private
 ```
 
-- 学習ロジック6件、認証フロー・設定診断10件、配信時のSecret保護5件の単体テスト。GitHubの応答は架空のものに置き換え、本人のみ許可・state・PKCE・最小権限・期限・偽造・他人・外部障害・CSRF、設定診断で値を漏らさないことを確認します。配信テストは架空のSecretとローカルの子プロセスを使い、実際のPOSIXパイプで値が届くこと、引数・子の環境・出力に漏れないこと、設定不足・起動失敗・配信失敗で停止することを確認します。
+- 学習ロジック6件、認証フロー・設定診断13件、配信時のSecret保護5件、合計24件の単体テスト。GitHubの応答は架空のものに置き換え、本人のみ許可・state・PKCE・最小権限・期限・偽造・他人・外部障害・CSRF、設定診断で値を漏らさないことを確認します。ログイン失敗の分類はHTTP成功／失敗の両方、任意のGitHubエラー文が画面に出ないこと、再試行リンクとCookieの破棄も確認します。配信テストは架空のSecretとローカルの子プロセスを使い、実際のPOSIXパイプで値が届くこと、引数・子の環境・出力に漏れないこと、設定不足・起動失敗・配信失敗で停止することを確認します。
 - `cloudflare:check` は配信せず、Workerをローカルでビルドします。
 - `deploy:private -- --dry-run` も配信しません。Secretは不要で、環境にあっても子へ渡さず、CloudflareへのSecret送信・アップロードを行いません。実配信のラッパーはCloudflare BuildsのLinux環境向けです。機密保護のためWranglerの生ログは表示せず、固定の完了・失敗メッセージを出します。
 - `test:pages` はサブディレクトリでのPWA検証で、Web公開はしません。
-- `test:private` は実際のローカルWorkers実行環境を一時HTTPSで起動し、未認証の全ファイルを拒否すること、試験用の署名済み本人Cookieでアプリを開けること、オフラインの検索・学習・履歴保存、認証URLをキャッシュしないことをChromiumで確認します。TLSは一時生成した試験証明書を限定して信頼し、外部通信の検証を無効にしません。
+- `test:private` は実際のローカルWorkers実行環境を一時HTTPSで起動し、未認証の全ファイルを拒否すること、認証エラー画面と再試行リンクを表示すること、試験用の署名済み本人Cookieでアプリを開けること、オフラインの検索・学習・履歴保存、認証URLをキャッシュしないことをChromiumで確認します。TLSは一時生成した試験証明書を限定して信頼し、外部通信の検証を無効にしません。
 
 実際のGitHubログイン往復、CloudflareのFree契約・配信URL、Safari実機での認証とホーム画面起動は、利用者のアカウント設定後の確認が必要です。それらが終わるまで、本人限定サイトの利用開始完了とは扱いません。
 
@@ -123,3 +144,4 @@ npm run test:private
 - [GitHub OAuth App登録](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app)
 - [GitHub OAuthとPKCE](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)
 - [GitHub OAuthの最小権限](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps)
+- [GitHubのトークン交換エラー](https://docs.github.com/en/apps/oauth-apps/maintaining-oauth-apps/troubleshooting-oauth-app-access-token-request-errors)

@@ -149,6 +149,22 @@ try {
   await unauth.goto(origin + "/");
   await unauth.getByRole("link", { name: "GitHubでログイン" }).waitFor();
   assert.equal(await unauth.locator("script[src]").count(), 0);
+  const failure = await unauth.goto(
+    origin +
+      "/auth/callback?code=fictional-local-code&state=fictional-local-state",
+  );
+  assert.equal(failure.status(), 403);
+  await unauth
+    .getByRole("heading", { name: "本人確認ができませんでした" })
+    .waitFor();
+  await unauth.getByText("確認コード：DUO-A01").waitFor();
+  assert.equal(
+    await unauth
+      .getByRole("link", { name: "もう一度GitHubでログイン" })
+      .getAttribute("href"),
+    "/auth/login",
+  );
+  assert.equal(await unauth.locator("script[src]").count(), 0);
   const owner = await browser.newContext();
   const signing = createHash("sha256")
     .update("duo:session:v1:" + secret)
@@ -236,7 +252,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: local Worker rejects anonymous assets, accepts signed owner cookie, preserves offline study/history, keeps OAuth network-only",
+    "PASS: local Worker rejects anonymous assets, renders safe login recovery, accepts signed owner cookie, preserves offline study/history, keeps OAuth network-only",
   );
 } finally {
   await browser?.close();

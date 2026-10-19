@@ -26,6 +26,9 @@ function setup({
   tokenError = false,
   profileError = false,
   networkError = false,
+  tokenBody,
+  tokenStatus = 200,
+  profileBody,
 } = {}) {
   const calls = [];
   let fetched = 0;
@@ -34,16 +37,22 @@ function setup({
     if (networkError) throw Error("simulated network failure");
     if (url.endsWith("/access_token"))
       return Response.json(
-        tokenError
-          ? { error: "bad_code" }
-          : {
-              access_token: "fictional-github-token",
-              token_type: "bearer",
-              scope,
-            },
+        tokenBody ??
+          (tokenError
+            ? { error: "bad_code" }
+            : {
+                access_token: "fictional-github-token",
+                token_type: "bearer",
+                scope,
+              }),
+        { status: tokenStatus },
       );
     if (profileError) return new Response("", { status: 401 });
-    return Response.json({ id: owner, login: "mutable-name-not-used" });
+    return Response.json(
+      profileBody !== undefined
+        ? profileBody
+        : { id: owner, login: "mutable-name-not-used" },
+    );
   });
   const env = {
     ...config,
@@ -281,6 +290,119 @@ test("state不足・改ざん・別ブラウザ・期限切れを外部通信前
   }
   assert.equal(s.calls.length, 0);
   assert.equal(s.fetched, 0);
+});
+async function assertLoginFailure(response, code, privateValues = []) {
+  assert.equal(response.status, 403);
+  assert.match(response.headers.get("content-type"), /text\/html/);
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.match(
+    response.headers.get("content-security-policy"),
+    /default-src 'none'/,
+  );
+  assert.equal(cookie(response, sessionName), undefined);
+  assert.equal(cookie(response, stateName), stateName + "=");
+  const body = await response.text();
+  assert.match(body, new RegExp("確認コード：" + code));
+  assert.match(body, /href="\/auth\/login">もう一度GitHubでログイン/);
+  for (const value of [
+    config.GITHUB_CLIENT_SECRET,
+    "fictional-github-token",
+    ...privateValues,
+  ])
+    assert.equal(body.includes(value), false, "機密値を本文へ含めない");
+  return body;
+}
+test("Cookie不足・state不正・未完了の認証を区別し安全な再試行リンクを表示する", async () => {
+  const s = setup();
+  const start = await begin(s);
+  const state = start.url.searchParams.get("state");
+  const callback =
+    "/auth/callback?code=fictional-sensitive-code&state=" + state;
+  await assertLoginFailure(
+    await s.handler.fetch(request(callback), s.env),
+    "DUO-A01",
+    [state, "fictional-sensitive-code"],
+  );
+  for (const token of [
+    "forged-sensitive-cookie",
+    await signedCookie("oauth", { state, verifier: "v", exp: 1 }),
+    start.cookie.slice(stateName.length + 1),
+  ]) {
+    await assertLoginFailure(
+      await s.handler.fetch(
+        request(callback + "-mismatch", { Cookie: stateName + "=" + token }),
+        s.env,
+      ),
+      "DUO-A02",
+      [state, token, "fictional-sensitive-code"],
+    );
+  }
+  await assertLoginFailure(
+    await s.handler.fetch(
+      request(
+        "/auth/callback?error=access_denied&error_description=fictional-sensitive-description",
+      ),
+      s.env,
+    ),
+    "DUO-A11",
+    ["fictional-sensitive-description"],
+  );
+  assert.equal(s.calls.length, 0);
+  assert.equal(s.fetched, 0);
+});
+test("GitHubの既知エラーだけを固定の日本語へ変換し応答本文を漏らさない", async () => {
+  const cases = [
+    ["incorrect_client_credentials", "DUO-A03", /同じGitHubアプリ/],
+    ["redirect_uri_mismatch", "DUO-A04", /コールバックURL/],
+    ["bad_verification_code", "DUO-A05", /認証コードが無効/],
+    ["pkce_verification_failed", "DUO-A05", /認証コードが無効/],
+    ["unverified_user_email", "DUO-A06", /メールアドレス確認/],
+    ["fictional-sensitive-unknown-error", "DUO-A07", /認証情報の交換/],
+    ["constructor", "DUO-A07", /認証情報の交換/],
+  ];
+  for (const [error, code, text] of cases) {
+    for (const tokenStatus of [200, 400]) {
+      const s = setup({
+        tokenStatus,
+        tokenBody: {
+          error,
+          error_description: config.GITHUB_CLIENT_SECRET,
+          error_uri: "https://fictional-sensitive.invalid/",
+          access_token: "fictional-sensitive-provider-token",
+        },
+      });
+      const body = await assertLoginFailure(
+        await finish(s, await begin(s)),
+        code,
+        [
+          error,
+          "fictional-sensitive-provider-token",
+          "fictional-sensitive.invalid",
+        ],
+      );
+      assert.match(body, text);
+      assert.equal(s.calls.length, 1);
+      assert.equal(s.fetched, 0);
+    }
+  }
+});
+test("通信障害・権限不一致・プロフィール取得失敗・他人を区別し本人制限を維持する", async () => {
+  for (const [options, code] of [
+    [{ networkError: true }, "DUO-A07"],
+    [{ tokenStatus: 503 }, "DUO-A07"],
+    [{ tokenBody: {} }, "DUO-A08"],
+    [{ scope: "repo" }, "DUO-A08"],
+    [{ profileError: true }, "DUO-A09"],
+    [{ profileBody: null }, "DUO-A09"],
+    [{ profileBody: {} }, "DUO-A09"],
+    [{ profileBody: { id: "123" } }, "DUO-A09"],
+    [{ profileBody: { id: -1 } }, "DUO-A09"],
+    [{ owner: 999 }, "DUO-A10"],
+  ]) {
+    const s = setup(options);
+    await assertLoginFailure(await finish(s, await begin(s)), code);
+    assert.equal(s.fetched, 0);
+  }
 });
 test("偽造・期限切れ・別対象・必須期限なしのCookieを拒否する", async () => {
   const s = setup();

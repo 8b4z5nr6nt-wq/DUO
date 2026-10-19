@@ -99,15 +99,83 @@ async function verify(config, purpose, token) {
   if (payload.type !== purpose) throw Error("wrong token type");
   return payload;
 }
-function loginPage() {
+const loginErrors = {
+  "DUO-A01": [
+    "ログインを始めたときのCookieが見つかりません。",
+    "Safariの同じタブで、下のボタンからログインを始めてください。途中で別のアプリやブラウザへ切り替えずに進めてください。",
+  ],
+  "DUO-A02": [
+    "ログインを始めたときの情報を確認できませんでした。時間切れや、別のログイン操作との重複が考えられます。",
+    "下のボタンからやり直し、同じタブでログインを完了してください。",
+  ],
+  "DUO-A03": [
+    "GitHubのアプリ設定と、Cloudflareに登録したログイン設定が一致していません。",
+    "Client IDとClient Secretが、同じGitHubアプリのものか設定画面で確認してください。Secretの値をチャットへ送る必要はありません。",
+  ],
+  "DUO-A04": [
+    "GitHubに登録したログイン後の戻り先URLと、DUOの設定が一致していません。",
+    "GitHubのアプリ設定にあるコールバックURLを確認してください。",
+  ],
+  "DUO-A05": [
+    "GitHubの認証コードが無効か、期限切れです。",
+    "戻るボタンや再読み込みで認証結果を再利用せず、下のボタンからログインを始めてください。",
+  ],
+  "DUO-A06": [
+    "GitHubアカウントのメールアドレス確認が完了していません。",
+    "GitHubの設定でメールアドレスの確認を完了し、下のボタンからやり直してください。DUOへメールアドレスを登録する必要はありません。",
+  ],
+  "DUO-A07": [
+    "GitHubとの認証情報の交換を完了できませんでした。",
+    "通信状況を確認し、少し待ってから下のボタンでやり直してください。繰り返す場合は、この画面の確認コードを知らせてください。",
+  ],
+  "DUO-A08": [
+    "GitHubからの認証結果が、DUOで使用する権限や形式と一致していません。",
+    "DUO専用のOAuthアプリを使っているか確認してください。原因確認のため、下の確認コードを知らせてください。",
+  ],
+  "DUO-A09": [
+    "GitHubからアカウントの本人情報を取得できませんでした。",
+    "少し待ってから下のボタンでやり直してください。繰り返す場合は、この画面の確認コードを知らせてください。",
+  ],
+  "DUO-A10": [
+    "GitHubから確認できたアカウントは、このDUOの利用者として許可されていません。",
+    "同じSafariのタブで、GitHubにログインしているアカウントを確認してからやり直してください。",
+  ],
+  "DUO-A11": [
+    "GitHubからのログイン結果が完了していないか、必要な情報が不足しています。",
+    "下のボタンからログインを始め、GitHubの承認画面が出たら承認してください。",
+  ],
+  "DUO-A12": [
+    "DUOのログイン処理を完了できませんでした。",
+    "下のボタンでやり直してください。繰り返す場合は、この画面の確認コードを知らせてください。",
+  ],
+};
+function authPage(title, content, action, status) {
+  // Every argument is fixed application text, never an identity-provider value.
   return reply(
-    `<!doctype html><html lang="ja"><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DUO ログイン</title><style>body{font-family:system-ui;background:#101113;color:#eee;max-width:32rem;margin:15vh auto;padding:24px;line-height:1.8}a{display:inline-block;color:#17210e;background:#bded99;border-radius:12px;padding:12px 20px;text-decoration:none;font-weight:bold}p{color:#bbc0c8}</style><h1>DUO</h1><p>ご本人だけが使える英語学習アプリです。</p><a href="/auth/login">GitHubでログイン</a><p>学習データはこの端末内に保存されます。</p></html>`,
-    401,
+    `<!doctype html><html lang="ja"><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DUO ログイン</title><style>body{font-family:system-ui;background:#101113;color:#eee;max-width:32rem;margin:15vh auto;padding:24px;line-height:1.8}a{display:inline-block;color:#17210e;background:#bded99;border-radius:12px;padding:12px 20px;text-decoration:none;font-weight:bold}p{color:#bbc0c8}</style><h1>${title}</h1>${content}<a href="/auth/login">${action}</a><p>学習データはこの端末内に保存されます。</p></html>`,
+    status,
     {
       "Content-Type": "text/html; charset=utf-8",
       "Content-Security-Policy":
         "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
     },
+  );
+}
+function loginPage() {
+  return authPage(
+    "DUO",
+    "<p>ご本人だけが使える英語学習アプリです。</p>",
+    "GitHubでログイン",
+    401,
+  );
+}
+function loginErrorPage(code) {
+  const [reason, help] = loginErrors[code];
+  return authPage(
+    "本人確認ができませんでした",
+    `<p>${reason}</p><p>${help}</p><p>確認コード：${code}</p>`,
+    "もう一度GitHubでログイン",
+    403,
   );
 }
 
@@ -164,6 +232,7 @@ export function createHandler(fetchGithub = fetch) {
       }
       if (url.pathname === "/auth/callback") {
         let response;
+        let failure = "DUO-A11";
         try {
           if (request.method !== "GET") throw Error("method");
           const code = url.searchParams.get("code"),
@@ -173,15 +242,18 @@ export function createHandler(fetchGithub = fetch) {
             url.searchParams.has("error") ||
             !code ||
             !state ||
-            !stored ||
             code.length > 2048 ||
             url.searchParams.getAll("state").length !== 1 ||
             url.searchParams.getAll("code").length !== 1
           )
             throw Error("missing callback");
+          failure = "DUO-A01";
+          if (!stored) throw Error("missing cookie");
+          failure = "DUO-A02";
           const claims = await verify(config, "oauth", stored);
           if (claims.state !== state || typeof claims.verifier !== "string")
             throw Error("state mismatch");
+          failure = "DUO-A07";
           // Do not forward identity-provider secrets across redirects or put them in URLs/logs.
           const exchange = await fetchGithub(
             "https://github.com/login/oauth/access_token",
@@ -202,8 +274,28 @@ export function createHandler(fetchGithub = fetch) {
               }),
             },
           );
-          if (!exchange.ok) throw Error("exchange failed");
           const token = await exchange.json();
+          // Allowlist GitHub's error identifiers. Never display raw provider data.
+          if (token.error) {
+            switch (token.error) {
+              case "incorrect_client_credentials":
+                failure = "DUO-A03";
+                break;
+              case "redirect_uri_mismatch":
+                failure = "DUO-A04";
+                break;
+              case "bad_verification_code":
+              case "pkce_verification_failed":
+                failure = "DUO-A05";
+                break;
+              case "unverified_user_email":
+                failure = "DUO-A06";
+                break;
+            }
+            throw Error("token exchange rejected");
+          }
+          if (!exchange.ok) throw Error("exchange failed");
+          failure = "DUO-A08";
           if (
             typeof token.access_token !== "string" ||
             !token.access_token ||
@@ -212,6 +304,7 @@ export function createHandler(fetchGithub = fetch) {
             token.scope.trim()
           )
             throw Error("unexpected token permissions");
+          failure = "DUO-A09";
           const profile = await fetchGithub("https://api.github.com/user", {
             redirect: "error",
             signal: AbortSignal.timeout(10000),
@@ -224,8 +317,11 @@ export function createHandler(fetchGithub = fetch) {
           });
           if (!profile.ok) throw Error("identity failed");
           const owner = await profile.json();
-          if (!Number.isSafeInteger(owner.id) || String(owner.id) !== config.id)
-            throw Error("not owner");
+          if (!owner || !Number.isSafeInteger(owner.id) || owner.id <= 0)
+            throw Error("invalid identity response");
+          failure = "DUO-A10";
+          if (String(owner.id) !== config.id) throw Error("not owner");
+          failure = "DUO-A12";
           // The GitHub token is used only above; neither browser cookies nor storage retain it.
           response = redirect(config.origin + "/");
           response.headers.append(
@@ -237,10 +333,7 @@ export function createHandler(fetchGithub = fetch) {
             ),
           );
         } catch {
-          response = reply(
-            "本人確認ができませんでした。許可されたGitHubアカウントで /auth/login からやり直してください。",
-            403,
-          );
+          response = loginErrorPage(failure);
         }
         response.headers.append("Set-Cookie", cookie(STATE, "", 0));
         return response;
