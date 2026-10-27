@@ -1,5 +1,6 @@
 import "./style.css";
 import { installSwipeNavigation } from "./swipe.js";
+import { emptyDrawing, hasInk, mountHandwriting } from "./handwriting.js";
 import {
   defaults,
   emptyState,
@@ -41,6 +42,33 @@ let state,
 const browse = { kind: "sentence", section: null, query: "" };
 let activeNavigation = null;
 let detailNavigationFocus = null;
+let handwritingEditor = null;
+let canvasControllers = [];
+function disposeCanvases() {
+  for (const controller of canvasControllers) controller.destroy();
+  canvasControllers = [];
+  handwritingEditor = null;
+}
+function captureAnswer() {
+  if (!study || study.phase !== "question") return;
+  if (handwritingEditor) study.drawing = handwritingEditor.getDrawing();
+  if ($("#answer")) study.answer = $("#answer").value;
+}
+function drawingHTML(drawing, label, id = "") {
+  return hasInk(drawing)
+    ? `<canvas ${id ? `id="${id}"` : ""} class="handwriting-preview" role="img" aria-label="${label}" data-drawing="${esc(JSON.stringify(drawing))}">手書き回答の筆跡</canvas>`
+    : '<p class="muted">（未回答）</p>';
+}
+function mountDrawingPreviews() {
+  app.querySelectorAll("canvas[data-drawing]").forEach((canvas) => {
+    canvasControllers.push(
+      mountHandwriting(canvas, {
+        drawing: JSON.parse(canvas.dataset.drawing),
+        readOnly: true,
+      }),
+    );
+  });
+}
 installSwipeNavigation(app, {
   previous: () => activeNavigation?.previous() ?? false,
   next: () => activeNavigation?.next() ?? false,
@@ -54,6 +82,7 @@ let options = {
   filter: "all",
   order: "number",
   count: "",
+  answerMode: "text",
 };
 function notify(text, tone = "error") {
   const el = document.querySelector("#notice");
@@ -105,12 +134,12 @@ function home() {
   ).length;
   app.innerHTML =
     title("今日の一歩を。", "自分で登録した英語を、自分のペースで。") +
-    `${study ? '<p><a class="button primary" href="#learn">途中の学習を再開</a></p>' : ""}<div class="grid"><section class="card"><p class="muted">今日の学習 / 目標 ${state.settings.goal} 問</p><div class="big">${today}<small> 問</small></div><progress max="${state.settings.goal}" value="${today}"></progress><p>${today >= state.settings.goal ? "目標達成です。" : "あと " + (state.settings.goal - today) + " 問"}</p></section><section class="card"><p class="muted">登録済み</p><div class="big">${state.items.length}<small> 件</small></div><p>復習期限到来 ${due} 方向別問題</p></section></div><section class="card"><h2>学習を始める</h2><p>4つの出題方法。範囲とペースを選んで始めましょう。</p>${link("setup", "学習設定へ", true)} ${link("search", "登録済みデータを見る")}</section>${state.items.length ? "" : `<section class="card"><h2>まだ問題がありません</h2><p>教材データは同梱されていません。自分で確認した内容を登録してください。動作確認には開発用の架空データを使えます。</p>${link("data", "データを登録する")}</section>`}${help()}`;
+    `${study ? '<p><a class="button primary" href="#learn">途中の学習を再開</a></p>' : ""}<div class="grid"><section class="card"><p class="muted">今日の学習 / 目標 ${state.settings.goal} 問</p><div class="big">${today}<small> 問</small></div><progress max="${state.settings.goal}" value="${today}"></progress><p>${today >= state.settings.goal ? "目標達成です。" : "あと " + (state.settings.goal - today) + " 問"}</p></section><section class="card"><p class="muted">登録済み</p><div class="big">${state.items.length}<small> 件</small></div><p>復習期限到来 ${due} 方向別問題</p></section></div><section class="card"><h2>学習を始める</h2><p>例文も単語も、書いて思い出す。範囲と回答方法を選んで始めましょう。</p>${link("setup", "学習設定へ", true)} ${link("search", "登録済みデータを見る")}</section>${state.items.length ? "" : `<section class="card"><h2>まだ問題がありません</h2><p>教材データは同梱されていません。自分で確認した内容を登録してください。動作確認には開発用の架空データを使えます。</p>${link("data", "データを登録する")}</section>`}${help()}`;
 }
 function setup() {
   app.innerHTML =
     title("学習設定", "未登録の番号は対象外になります。") +
-    `${study ? '<p><a class="button" href="#learn">途中の学習に戻る</a></p>' : ""}<form id="setup-form"><div class="grid"><label>種類<select name="kind"><option value="sentence">例文</option><option value="word">単語</option><option value="all">例文と単語</option></select></label><label>出題方向<select name="direction"><option value="en-ja">英語 → 日本語</option><option value="ja-en">日本語 → 英語</option></select></label></div><fieldset><legend>番号で範囲指定（空欄は全範囲）</legend><label>セクション<input name="sections" placeholder="例: 1-5,8"></label><div class="grid"><label>例文番号<input name="sentences" placeholder="例: 1-20"></label><label>単語番号<input name="words" placeholder="例: 1-50"></label></div></fieldset><div class="grid"><label>絞り込み<select name="filter"><option value="all">登録済みすべて</option><option value="weak">苦手（微妙・覚えてない）</option><option value="due">復習期限が来た問題</option><option value="favorite">お気に入り</option><option value="review">要復習マーク</option></select></label><label>順序<select name="order"><option value="number">番号順</option><option value="random">ランダム</option></select></label><label>問題数（空欄は全問）<input type="number" name="count" min="1" max="10000" placeholder="全問"></label></div><fieldset><legend>今回の時間設定</legend>${timingFields(state.settings)}</fieldset><p id="target-count" aria-live="polite"></p><button class="primary" type="submit">学習を開始</button></form>`;
+    `${study ? '<p><a class="button" href="#learn">途中の学習に戻る</a></p>' : ""}<form id="setup-form"><div class="grid"><label>種類<select name="kind"><option value="sentence">例文</option><option value="word">単語</option><option value="all">例文と単語</option></select></label><label>出題方向<select name="direction"><option value="en-ja">英語 → 日本語</option><option value="ja-en">日本語 → 英語</option></select></label></div><label>回答方法<select name="answerMode"><option value="text">キーボード</option><option value="handwriting">手書き（Apple Pencil・指）</option></select></label><p class="muted">手書きは、書いた回答と正解を見比べて自己採点します。</p><fieldset><legend>番号で範囲指定（空欄は全範囲）</legend><label>セクション<input name="sections" placeholder="例: 1-5,8"></label><div class="grid"><label>例文番号<input name="sentences" placeholder="例: 1-20"></label><label>単語番号<input name="words" placeholder="例: 1-50"></label></div></fieldset><div class="grid"><label>絞り込み<select name="filter"><option value="all">登録済みすべて</option><option value="weak">苦手（微妙・覚えてない）</option><option value="due">復習期限が来た問題</option><option value="favorite">お気に入り</option><option value="review">要復習マーク</option></select></label><label>順序<select name="order"><option value="number">番号順</option><option value="random">ランダム</option></select></label><label>問題数（空欄は全問）<input type="number" name="count" min="1" max="10000" placeholder="全問"></label></div><fieldset><legend>今回の時間設定</legend>${timingFields(state.settings)}</fieldset><p id="target-count" aria-live="polite"></p><button class="primary" type="submit">学習を開始</button></form>`;
   const form = $("#setup-form");
   for (const [k, v] of Object.entries(options)) form.elements[k].value = v;
   const read = () => {
@@ -124,6 +153,7 @@ function setup() {
         "filter",
         "order",
         "count",
+        "answerMode",
       ].map((k) => [k, form.elements[k].value]),
     );
     return selectItems(state, options);
@@ -144,9 +174,12 @@ function setup() {
   form.onsubmit = async (e) => {
     e.preventDefault();
     try {
-      const config = readTiming(form, state.settings);
-      validateSettings(config);
       let queue = read();
+      const config = {
+        ...readTiming(form, state.settings),
+        answerMode: options.answerMode,
+      };
+      validateSettings(config);
       if (options.order === "random") queue = shuffle(queue);
       if (options.count) queue = queue.slice(0, Number(options.count));
       if (!queue.length) return;
@@ -156,7 +189,13 @@ function setup() {
         direction: options.direction,
         attempts: [],
       };
-      if (!(await commit((s) => s.sessions.push(session)))) return;
+      if (
+        !(await commit((s) => {
+          s.sessions.push(session);
+          s.settings.answerMode = config.answerMode;
+        }))
+      )
+        return;
       study = {
         queue,
         index: 0,
@@ -169,6 +208,8 @@ function setup() {
         paused: false,
         hints: 0,
         answer: "",
+        inputMode: config.answerMode,
+        drawing: emptyDrawing(),
         retried: false,
       };
       location.hash = "learn";
@@ -200,7 +241,56 @@ function answerText() {
   const item = current();
   return study.direction === "en-ja" ? item.ja : item.en;
 }
+function answerFormHTML() {
+  const disabled = study.paused ? "disabled" : "";
+  const handwriting = study.inputMode === "handwriting";
+  return `<form id="answer-form">
+    <div class="answer-modes" role="group" aria-label="回答方法">
+      <button type="button" data-answer-mode="text" aria-pressed="${!handwriting}" ${disabled}>キーボード</button>
+      <button type="button" data-answer-mode="handwriting" aria-pressed="${handwriting}" ${disabled}>手書き</button>
+    </div>
+    ${
+      handwriting
+        ? `<div class="handwriting-workspace" data-no-swipe>
+      <div class="handwriting-toolbar"><span>あなたの回答</span><div class="row">
+        <button type="button" id="ink-undo" ${disabled}>ひとつ戻す</button>
+        <button type="button" id="ink-clear" ${disabled}>すべて消す</button>
+      </div></div>
+      <p class="handwriting-help" id="handwriting-help">Apple Pencil・指・マウスで書けます。</p>
+      <canvas id="handwriting-answer" class="handwriting-canvas" aria-label="手書きの回答欄" aria-describedby="handwriting-help" aria-disabled="${study.paused}">手書きに対応していない場合はキーボードへ切り替えてください。</canvas>
+      <p id="ink-status" class="ink-status" role="status" aria-live="polite"></p>
+    </div>`
+        : `<label>あなたの回答<textarea id="answer" lang="${study.direction === "ja-en" ? "en" : "ja"}" autocomplete="off" ${disabled}>${esc(study.answer)}</textarea></label>`
+    }
+    <div class="row"><button class="primary" ${disabled}>回答を確認</button><button type="button" id="skip" ${disabled}>スキップ</button></div>
+  </form>`;
+}
+function bindHandwriting() {
+  const update = (drawing) => {
+    study.drawing = drawing;
+    const count = drawing.strokes.length;
+    $("#ink-status").textContent = count
+      ? `${count}画 · 書き終わったら回答を確認`
+      : "まだ書いていません";
+    $("#ink-undo").disabled = study.paused || count === 0;
+    $("#ink-clear").disabled = study.paused || count === 0;
+  };
+  handwritingEditor = mountHandwriting($("#handwriting-answer"), {
+    drawing: study.drawing,
+    disabled: study.paused,
+    onChange: update,
+    onLimit: () =>
+      notify(
+        "この回答欄の筆跡がいっぱいです。不要な線を消すか、キーボードに切り替えてください。",
+      ),
+  });
+  canvasControllers.push(handwritingEditor);
+  $("#ink-undo").onclick = () => handwritingEditor.undo();
+  $("#ink-clear").onclick = () => handwritingEditor.clear();
+  update(study.drawing);
+}
 function learn() {
+  disposeCanvases();
   if (!study) {
     app.innerHTML =
       title("学習を選んでください") + link("setup", "学習設定へ", true);
@@ -208,8 +298,9 @@ function learn() {
   }
   const item = current(),
     prompt = study.direction === "en-ja" ? item.en : item.ja;
-  app.innerHTML = `<div class="learning">${title("学習", `${study.index + 1} / ${study.queue.length} 問 · ${type(item)} ${item.number} · セクション ${item.section} · ${study.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"}`)}<div class="row between"><span id="timer" aria-live="off"></span><button id="pause">${study.paused ? "再開" : "一時停止"}</button></div><p id="paused" ${study.paused ? "" : "hidden"}>一時停止中です。タイマーは進みません。</p><section class="card"><p class="prompt">${esc(prompt)}</p><p class="hint" id="hint"></p>${study.phase === "question" ? `<form id="answer-form"><label>あなたの回答<textarea id="answer" lang="${study.direction === "ja-en" ? "en" : "ja"}" autocomplete="off" ${study.paused ? "disabled" : ""}>${esc(study.answer)}</textarea></label><div class="row"><button class="primary" ${study.paused ? "disabled" : ""}>回答を確認</button><button type="button" id="skip" ${study.paused ? "disabled" : ""}>スキップ</button></div></form>` : evaluation()}</section><p class="muted">${study.retried ? "再挑戦中：前の間違いの記録は残ります。" : "日本語は自己判定。英語も言い換えの場合は自己判定できます。"}</p><button id="finish" class="danger">ここで終了して結果を見る</button></div>`;
+  app.innerHTML = `<div class="learning">${title("学習", `${study.index + 1} / ${study.queue.length} 問 · ${type(item)} ${item.number} · セクション ${item.section} · ${study.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"}`)}<div class="row between"><span id="timer" aria-live="off"></span><button id="pause">${study.paused ? "再開" : "一時停止"}</button></div><p id="paused" ${study.paused ? "" : "hidden"}>一時停止中です。タイマーは進みません。</p><section class="card learning-card"><p class="prompt">${esc(prompt)}</p><p class="hint" id="hint"></p>${study.phase === "question" ? answerFormHTML() : evaluation()}</section><p class="muted">${study.retried ? "再挑戦中：前の間違いの記録は残ります。" : study.inputMode === "handwriting" ? "筆跡は文字に変換せず、正解と見比べて自己採点します。" : "日本語は自己判定。英語も言い換えの場合は自己判定できます。"}</p><button id="finish" class="danger">ここで終了して結果を見る</button></div>`;
   $("#pause").onclick = () => {
+    captureAnswer();
     if (!study.paused) advanceClock();
     study.paused = !study.paused;
     study.lastTick = performance.now();
@@ -217,28 +308,44 @@ function learn() {
   };
   $("#finish").onclick = finish;
   if (study.phase === "question") {
-    const input = $("#answer");
-    let composing = false,
-      compositionEnded = -Infinity;
-    input.addEventListener("compositionstart", () => (composing = true));
-    input.addEventListener("compositionend", () => {
-      composing = false;
-      compositionEnded = performance.now();
+    app.querySelectorAll("[data-answer-mode]").forEach((button) => {
+      button.onclick = () => {
+        if (
+          study.paused ||
+          busy ||
+          button.dataset.answerMode === study.inputMode
+        )
+          return;
+        captureAnswer();
+        study.inputMode = button.dataset.answerMode;
+        learn();
+      };
     });
-    input.oninput = () => (study.answer = input.value);
-    input.onkeydown = (e) => {
-      if (
-        e.key === "Enter" &&
-        !e.shiftKey &&
-        !e.isComposing &&
-        !composing &&
-        e.keyCode !== 229 &&
-        performance.now() - compositionEnded > 80
-      ) {
-        e.preventDefault();
-        if (!study.paused) submit();
-      }
-    };
+    const input = $("#answer");
+    if (input) {
+      let composing = false,
+        compositionEnded = -Infinity;
+      input.addEventListener("compositionstart", () => (composing = true));
+      input.addEventListener("compositionend", () => {
+        composing = false;
+        compositionEnded = performance.now();
+      });
+      input.oninput = () => (study.answer = input.value);
+      input.onkeydown = (e) => {
+        if (
+          e.key === "Enter" &&
+          !e.shiftKey &&
+          !e.isComposing &&
+          !composing &&
+          e.keyCode !== 229 &&
+          performance.now() - compositionEnded > 80
+        ) {
+          e.preventDefault();
+          if (!study.paused) submit();
+        }
+      };
+      if (!study.paused) input.focus();
+    } else bindHandwriting();
     $("#answer-form").onsubmit = (e) => {
       e.preventDefault();
       submit();
@@ -246,8 +353,8 @@ function learn() {
     $("#skip").onclick = async () => {
       if (await recordAttempt(null, "skip")) next();
     };
-    if (!study.paused) input.focus();
   } else {
+    mountDrawingPreviews();
     app.querySelectorAll("[data-rating]").forEach(
       (b) =>
         (b.onclick = async () => {
@@ -263,6 +370,7 @@ function learn() {
         study.elapsed = 0;
         study.hints = 0;
         study.answer = "";
+        study.drawing = emptyDrawing();
         study.retried = true;
         study.timedOut = false;
         study.judgment = null;
@@ -276,17 +384,25 @@ function learn() {
 }
 function submit() {
   if (study.paused || busy) return;
+  captureAnswer();
   advanceClock();
   if (study.phase !== "question") return;
-  study.answer = $("#answer").value;
   study.phase = "evaluate";
-  study.judgment = judge(
-    study.answer,
-    current(),
-    study.direction,
-    study.config,
-  );
+  study.judgment = answerJudgment();
   learn();
+}
+function answerJudgment() {
+  if (study.inputMode !== "handwriting")
+    return judge(study.answer, current(), study.direction, study.config);
+  const item = current();
+  return {
+    status: "self",
+    exact: false,
+    answers:
+      study.direction === "en-ja"
+        ? [item.ja, ...item.aliasesJa]
+        : [item.en, ...item.aliasesEn],
+  };
 }
 function diffHTML(input, expected) {
   const parts = difference(input, expected);
@@ -295,20 +411,22 @@ function diffHTML(input, expected) {
   return `<div class="scroll"><p class="muted">異なる範囲を強調しています（表記上の比較）。</p><table><tr><th>比較</th><th>回答</th></tr><tr><td>入力</td><td>${render(parts.answer, "del")}</td></tr><tr><td>登録された答え</td><td>${render(parts.expected, "ins")}</td></tr></table></div>`;
 }
 function evaluation() {
-  const result =
-    study.judgment ||
-    judge(study.answer, current(), study.direction, study.config);
+  const result = study.judgment || answerJudgment();
+  const handwritten = study.inputMode === "handwriting";
   const status = study.timedOut
     ? "時間切れ"
-    : result.status === "correct"
-      ? "登録された正解と一致しました"
-      : result.status === "spelling"
-        ? "スペルミスの可能性"
-        : "意味の一致は自動判断できません。自己判定してください";
-  return `<h2>${status}</h2><p>あなたの回答</p><pre>${esc(study.answer || "（未回答）")}</pre><p>正解候補</p><pre>${result.answers.map(esc).join("\n")}</pre>${result.status === "correct" ? "" : diffHTML(study.answer, answerText())}<label>回答の正誤（自己判定で変更できます）<select id="correctness"><option value="correct" ${result.exact && !study.timedOut ? "selected" : ""}>正解</option><option value="incorrect" ${result.status === "spelling" && !study.timedOut ? "selected" : ""}>不正解</option><option value="unknown" ${!result.exact && result.status !== "spelling" && !study.timedOut ? "selected" : ""}>判断保留</option>${study.timedOut ? '<option value="timeout" selected>時間切れ</option>' : ""}</select></label><p>記憶を評価して次へ</p><div class="row">${ratings.map((r, i) => `<button data-rating="${i}" ${study.paused ? "disabled" : ""}>${r}</button>`).join("")}</div><p><button id="retry" ${study.paused ? "disabled" : ""}>覚えてないとして記録し、その場で再挑戦</button></p>`;
+    : handwritten
+      ? "手書きの回答を見比べましょう"
+      : result.status === "correct"
+        ? "登録された正解と一致しました"
+        : result.status === "spelling"
+          ? "スペルミスの可能性"
+          : "意味の一致は自動判断できません。自己判定してください";
+  return `<h2>${status}</h2><p>あなたの回答</p>${handwritten ? drawingHTML(study.drawing, "あなたの手書き回答", "handwriting-review") : `<pre>${esc(study.answer || "（未回答）")}</pre>`}<p>正解候補</p><pre>${result.answers.map(esc).join("\n")}</pre>${handwritten || result.status === "correct" ? "" : diffHTML(study.answer, answerText())}<label>回答の正誤（自己判定で変更できます）<select id="correctness"><option value="correct" ${result.exact && !study.timedOut ? "selected" : ""}>正解</option><option value="incorrect" ${result.status === "spelling" && !study.timedOut ? "selected" : ""}>不正解</option><option value="unknown" ${!result.exact && result.status !== "spelling" && !study.timedOut ? "selected" : ""}>判断保留</option>${study.timedOut ? '<option value="timeout" selected>時間切れ</option>' : ""}</select></label><p>記憶を評価して次へ</p><div class="row">${ratings.map((r, i) => `<button data-rating="${i}" ${study.paused ? "disabled" : ""}>${r}</button>`).join("")}</div><p><button id="retry" ${study.paused ? "disabled" : ""}>覚えてないとして記録し、その場で再挑戦</button></p>`;
 }
 async function recordAttempt(rating, correctness) {
   if (study.paused || busy) return false;
+  captureAnswer();
   const item = current(),
     at = Date.now();
   return commit((s) => {
@@ -319,7 +437,11 @@ async function recordAttempt(rating, correctness) {
       section: item.section,
       prompt: study.direction === "en-ja" ? item.en : item.ja,
       correctAnswer: answerText(),
-      answer: study.answer,
+      answer: study.inputMode === "handwriting" ? "" : study.answer,
+      inputMode: study.inputMode,
+      ...(study.inputMode === "handwriting"
+        ? { drawing: structuredClone(study.drawing) }
+        : {}),
       correctness,
       rating: rating ?? 0,
       hints: study.hints,
@@ -352,6 +474,7 @@ function next() {
     lastTick: performance.now(),
     hints: 0,
     answer: "",
+    drawing: emptyDrawing(),
     retried: false,
     timedOut: false,
     judgment: null,
@@ -386,10 +509,11 @@ function advanceClock() {
           Math.floor((s.elapsed - s.config.hintStart) / s.config.hintInterval),
       );
     if (s.config.timer && s.elapsed >= s.config.limit) {
+      captureAnswer();
       s.elapsed = s.config.limit;
       s.timedOut = true;
       s.phase = "evaluate";
-      s.judgment = judge(s.answer, current(), s.direction, s.config);
+      s.judgment = answerJudgment();
       if (location.hash === "#learn") learn();
     }
   }
@@ -409,6 +533,7 @@ setInterval(() => {
 }, 200);
 function pauseForLeaving() {
   if (study && !study.paused) {
+    captureAnswer();
     advanceClock();
     study.paused = true;
     if (location.hash === "#learn") learn();
@@ -425,10 +550,11 @@ function result() {
     title("学習結果") +
     (session ? sessionHTML(session) : "<p>履歴がありません。</p>") +
     link("setup", "もう一度学習", true);
+  mountDrawingPreviews();
 }
 function sessionHTML(s) {
   const a = s.attempts;
-  return `<section class="card"><h2>${fmt(s.started)}</h2><p>${s.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"} · ${a.length} 回答 · ${new Set(a.map(identity)).size} 問 · ${s.ended ? "終了" : "途中終了／進行中"}</p><p>正解 ${a.filter((x) => x.correctness === "correct").length} / 不正解 ${a.filter((x) => x.correctness === "incorrect").length} / 保留 ${a.filter((x) => x.correctness === "unknown").length} / スキップ ${a.filter((x) => x.correctness === "skip").length} / 時間切れ ${a.filter((x) => x.correctness === "timeout").length}</p>${a.map((x) => `<details><summary>${type(x)} ${x.number} · ${ratings[x.rating]} · ${{ correct: "正解", incorrect: "不正解", unknown: "保留", skip: "スキップ", timeout: "時間切れ" }[x.correctness]} ${x.retry ? "（再挑戦）" : ""}</summary><p>${fmt(x.at)} · セクション ${x.section} · ヒント ${x.hints} 文字</p><p>問題: ${esc(x.prompt)}</p><p>回答: ${esc(x.answer || "（未回答）")}</p><p>正解: ${esc(x.correctAnswer)}</p></details>`).join("")}</section>`;
+  return `<section class="card"><h2>${fmt(s.started)}</h2><p>${s.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"} · ${a.length} 回答 · ${new Set(a.map(identity)).size} 問 · ${s.ended ? "終了" : "途中終了／進行中"}</p><p>正解 ${a.filter((x) => x.correctness === "correct").length} / 不正解 ${a.filter((x) => x.correctness === "incorrect").length} / 保留 ${a.filter((x) => x.correctness === "unknown").length} / スキップ ${a.filter((x) => x.correctness === "skip").length} / 時間切れ ${a.filter((x) => x.correctness === "timeout").length}</p>${a.map((x) => `<details><summary>${type(x)} ${x.number} · ${ratings[x.rating]} · ${{ correct: "正解", incorrect: "不正解", unknown: "保留", skip: "スキップ", timeout: "時間切れ" }[x.correctness]} ${x.retry ? "（再挑戦）" : ""}</summary><p>${fmt(x.at)} · セクション ${x.section} · ヒント ${x.hints} 文字</p><p>問題: ${esc(x.prompt)}</p>${x.inputMode === "handwriting" ? `<p>回答：手書き</p>${drawingHTML(x.drawing, "保存した手書き回答")}` : `<p>回答: ${esc(x.answer || "（未回答）")}</p>`}<p>正解: ${esc(x.correctAnswer)}</p></details>`).join("")}</section>`;
 }
 function search(requestedSection) {
   if (requestedSection !== undefined) {
@@ -774,6 +900,7 @@ function progress() {
       .join(
         "",
       )}</div><h2>学習履歴</h2>${state.sessions.length ? [...state.sessions].reverse().map(sessionHTML).join("") : '<p class="empty">まだ履歴がありません。</p>'}`;
+  mountDrawingPreviews();
 }
 function data() {
   app.innerHTML =
@@ -897,6 +1024,7 @@ function showPreview() {
       if (p.kind === "backup") {
         study = null;
         lastResult = null;
+        options.answerMode = state.settings.answerMode;
       }
       importPreview = null;
       data();
@@ -974,9 +1102,14 @@ function render() {
   if (document.querySelector("#notice").dataset.tone === "success") notify("");
   activeNavigation = null;
   const [route = "home", ...parts] = location.hash.slice(1).split("/");
-  const navRoute = ["detail", "section"].includes(route) ? "search" : route;
+  const navRoute = ["detail", "section"].includes(route)
+    ? "search"
+    : ["learn", "result"].includes(route)
+      ? "setup"
+      : route;
   if (route !== "detail") detailNavigationFocus = null;
   if (study && route !== "learn") pauseForLeaving();
+  disposeCanvases();
   document
     .querySelectorAll("nav a")
     .forEach((a) => a.classList.toggle("active", a.hash === "#" + navRoute));
@@ -1038,6 +1171,8 @@ window.addEventListener("offline", connection);
 async function init() {
   try {
     state = await openStorage();
+    state.settings = { ...defaults, ...state.settings };
+    options.answerMode = state.settings.answerMode;
     storageReady = true;
   } catch (e) {
     state = emptyState();

@@ -1,3 +1,5 @@
+import { normalizeDrawing } from "./handwriting.js";
+
 export const defaults = {
   goal: 10,
   intervals: [1, 3, 7],
@@ -9,6 +11,7 @@ export const defaults = {
   hintInterval: 3,
   timer: true,
   hints: true,
+  answerMode: "text",
 };
 export const emptyState = () => ({
   version: 1,
@@ -259,7 +262,8 @@ export function validateBackup(raw) {
     )
       throw Error("復習記録の形式が不正です。");
   }
-  const ids = new Set();
+  const ids = new Set(),
+    sessions = [];
   for (const s of raw.sessions) {
     if (
       !s ||
@@ -271,6 +275,7 @@ export function validateBackup(raw) {
     )
       throw Error("学習履歴の形式が不正です。");
     ids.add(s.id);
+    const attempts = [];
     for (const a of s.attempts) {
       if (
         !a ||
@@ -291,17 +296,41 @@ export function validateBackup(raw) {
         a.hints < 0
       )
         throw Error("回答履歴の形式が不正です。");
+      if (
+        a.inputMode !== undefined &&
+        !["text", "handwriting"].includes(a.inputMode)
+      )
+        throw Error("回答方法の形式が不正です。");
+      if (a.inputMode === "handwriting") {
+        let drawing;
+        try {
+          drawing = normalizeDrawing(a.drawing);
+        } catch {
+          throw Error("手書き回答の形式が不正です。");
+        }
+        attempts.push({ ...a, drawing });
+      } else {
+        if (a.drawing !== undefined)
+          throw Error("手書き回答の回答方法が指定されていません。");
+        attempts.push(a);
+      }
     }
+    sessions.push({ ...s, attempts });
   }
   return {
     version: 1,
     items: parsed.items,
     records: structuredClone(raw.records),
-    sessions: structuredClone(raw.sessions),
+    sessions: structuredClone(sessions),
     settings,
   };
 }
 export function validateSettings(s) {
+  if (
+    s.answerMode !== undefined &&
+    !["text", "handwriting"].includes(s.answerMode)
+  )
+    throw Error("回答方法は文字入力または手書きを選んでください。");
   for (const [f, min, max] of [
     ["goal", 1, 1000],
     ["limit", 1, 3600],
