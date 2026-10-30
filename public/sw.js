@@ -1,4 +1,4 @@
-const CACHE = "duo-shell-v2";
+const CACHE = "duo-shell-v1";
 function appResponse(response, url, type) {
   return (
     response.ok &&
