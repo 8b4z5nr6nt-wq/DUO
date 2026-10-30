@@ -18,6 +18,7 @@ async function setup(page, { mode = "handwriting", count = "1", limit } = {}) {
     .getByRole("combobox", { name: "回答方法", exact: true })
     .selectOption(mode);
   await page.getByLabel("問題数（空欄は全問）").fill(count);
+  await page.getByText("タイマー・ヒント", { exact: true }).click();
   await page.getByLabel("ヒントを使う").uncheck();
   await page.getByLabel("時間制限を使う").setChecked(limit !== undefined);
   if (limit !== undefined)

@@ -11,6 +11,7 @@ async function setup(page, kind = "word", direction = "ja-en", count = "1") {
     .selectOption(kind);
   await page.getByLabel("出題方向").selectOption(direction);
   await page.getByLabel("問題数（空欄は全問）").fill(count);
+  await page.getByText("タイマー・ヒント", { exact: true }).click();
   await page.getByLabel("時間制限を使う").uncheck();
   await page.getByLabel("ヒントを使う").uncheck();
   await page.getByRole("button", { name: "学習を開始" }).click();
@@ -98,6 +99,7 @@ test("タイマー・ヒント・一時停止・時間切れ後の再挑戦", as
   await demo(page);
   await page.getByRole("link", { name: "学習", exact: true }).click();
   await page.getByLabel("問題数（空欄は全問）").fill("1");
+  await page.getByText("タイマー・ヒント", { exact: true }).click();
   await page.getByLabel("制限時間（秒）").fill("3");
   await page.getByLabel("ヒント開始（秒）").fill("0");
   await page.getByLabel("ヒント間隔（秒）").fill("1");

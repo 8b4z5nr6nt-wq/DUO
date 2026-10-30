@@ -3,6 +3,10 @@ import { installSwipeNavigation } from "./swipe.js";
 import { emptyDrawing, hasInk, mountHandwriting } from "./handwriting.js";
 import {
   defaults,
+  matchScore,
+  memoryRating,
+  hintWords,
+  choiceAnswers,
   emptyState,
   difference,
   key,
@@ -73,7 +77,7 @@ installSwipeNavigation(app, {
   previous: () => activeNavigation?.previous() ?? false,
   next: () => activeNavigation?.next() ?? false,
 });
-let options = {
+const defaultOptions = {
   kind: "sentence",
   direction: "en-ja",
   sections: "",
@@ -84,6 +88,7 @@ let options = {
   count: "",
   answerMode: "text",
 };
+let options = { ...defaultOptions };
 function notify(text, tone = "error") {
   const el = document.querySelector("#notice");
   el.textContent = text;
@@ -139,8 +144,23 @@ function home() {
 function setup() {
   app.innerHTML =
     title("学習設定", "未登録の番号は対象外になります。") +
-    `${study ? '<p><a class="button" href="#learn">途中の学習に戻る</a></p>' : ""}<form id="setup-form"><div class="grid"><label>種類<select name="kind"><option value="sentence">例文</option><option value="word">単語</option><option value="all">例文と単語</option></select></label><label>出題方向<select name="direction"><option value="en-ja">英語 → 日本語</option><option value="ja-en">日本語 → 英語</option></select></label></div><label>回答方法<select name="answerMode"><option value="text">キーボード</option><option value="handwriting">手書き（Apple Pencil・指）</option></select></label><p class="muted">手書きは、書いた回答と正解を見比べて自己採点します。</p><fieldset><legend>番号で範囲指定（空欄は全範囲）</legend><label>セクション<input name="sections" placeholder="例: 1-5,8"></label><div class="grid"><label>例文番号<input name="sentences" placeholder="例: 1-20"></label><label>単語番号<input name="words" placeholder="例: 1-50"></label></div></fieldset><div class="grid"><label>絞り込み<select name="filter"><option value="all">登録済みすべて</option><option value="weak">苦手（微妙・覚えてない）</option><option value="due">復習期限が来た問題</option><option value="favorite">お気に入り</option><option value="review">要復習マーク</option></select></label><label>順序<select name="order"><option value="number">番号順</option><option value="random">ランダム</option></select></label><label>問題数（空欄は全問）<input type="number" name="count" min="1" max="10000" placeholder="全問"></label></div><fieldset><legend>今回の時間設定</legend>${timingFields(state.settings)}</fieldset><p id="target-count" aria-live="polite"></p><button class="primary" type="submit">学習を開始</button></form>`;
+    `${study ? '<p><a class="button" href="#learn">途中の学習に戻る</a></p>' : ""}<form id="setup-form"><div class="grid"><label>種類<select name="kind"><option value="sentence">例文</option><option value="word">単語</option><option value="all">例文と単語</option></select></label><label>出題方向<select name="direction"><option value="en-ja">英語 → 日本語</option><option value="ja-en">日本語 → 英語</option></select></label></div><label>回答方法<select name="answerMode"><option value="text">キーボード</option><option value="scribble">手書き（Apple Pencil）・スクリブル自動採点</option><option value="choice">4択問題</option><option value="card">カード形式</option><option value="handwriting">筆跡を保存（Apple Pencil・指／自己採点）</option></select></label><p class="muted">iPadOSのスクリブルを有効にし、回答欄にApple Pencilで書くと、変換された文字を自動採点します。4択には同じ種類の異なる答えが4件以上必要です。</p><details><summary>範囲を指定</summary><fieldset><legend>番号で範囲指定（空欄は全範囲）</legend><label>セクション<input name="sections" placeholder="例: 1-5,8"></label><div class="grid"><label>例文番号<input name="sentences" placeholder="例: 1-20"></label><label>単語番号<input name="words" placeholder="例: 1-50"></label></div></fieldset></details><div class="grid"><label>絞り込み<select name="filter"><option value="all">登録済みすべて</option><option value="weak">苦手（微妙・覚えてない）</option><option value="due">復習期限が来た問題</option><option value="favorite">お気に入り</option><option value="review">要復習マーク</option></select></label><label>順序<select name="order"><option value="number">番号順</option><option value="random">ランダム</option></select></label><label>問題数（空欄は全問）<input type="number" name="count" min="1" max="10000" placeholder="全問"></label></div><details><summary>タイマー・ヒント</summary><fieldset><legend>時間設定</legend>${timingFields(state.settings)}</fieldset></details><p id="target-count" aria-live="polite"></p><button class="primary" type="submit">学習を開始</button><button type="button" id="reset-study">学習設定を初期化</button></form>`;
+  $("#reset-study").onclick = async () => {
+    if (
+      await commit((s) => {
+        s.settings = structuredClone(defaults);
+      })
+    ) {
+      options = { ...defaultOptions };
+      setup();
+      notify(
+        "学習設定を初期化しました。問題・履歴・復習予定は保持しています。",
+        "success",
+      );
+    }
+  };
   const form = $("#setup-form");
+  let pendingSave = Promise.resolve();
   for (const [k, v] of Object.entries(options)) form.elements[k].value = v;
   const read = () => {
     options = Object.fromEntries(
@@ -170,16 +190,45 @@ function setup() {
     }
   };
   form.addEventListener("input", update);
+  form.addEventListener("input", () => {
+    pendingSave = pendingSave.then(async () => {
+      try {
+        read();
+        const saved = {
+          ...readTiming(form, state.settings),
+          answerMode: options.answerMode,
+          studyOptions: { ...options },
+        };
+        validateSettings(saved);
+        await commit((s) => {
+          s.settings = saved;
+        });
+      } catch (e) {
+        notify(e.message);
+      }
+    });
+  });
   update();
   form.onsubmit = async (e) => {
     e.preventDefault();
     try {
+      await pendingSave;
       let queue = read();
       const config = {
         ...readTiming(form, state.settings),
         answerMode: options.answerMode,
       };
       validateSettings(config);
+      if (
+        config.answerMode === "choice" &&
+        queue.some(
+          (item) =>
+            !choiceAnswers(item, state.items, options.direction, config).length,
+        )
+      )
+        throw Error(
+          "4択には同じ種類の異なる正解が4件以上必要です。問題を追加するか、別の回答方法を選んでください。",
+        );
       if (options.order === "random") queue = shuffle(queue);
       if (options.count) queue = queue.slice(0, Number(options.count));
       if (!queue.length) return;
@@ -192,7 +241,7 @@ function setup() {
       if (
         !(await commit((s) => {
           s.sessions.push(session);
-          s.settings.answerMode = config.answerMode;
+          s.settings = { ...config, studyOptions: { ...options } };
         }))
       )
         return;
@@ -244,10 +293,22 @@ function answerText() {
 function answerFormHTML() {
   const disabled = study.paused ? "disabled" : "";
   const handwriting = study.inputMode === "handwriting";
+  if (study.inputMode === "choice") {
+    study.choices ||= choiceAnswers(
+      current(),
+      state.items,
+      study.direction,
+      study.config,
+    );
+    return `<form id="answer-form"><p>正しい答えを選択</p><div class="choice-grid">${study.choices.map((v, i) => `<button type="button" data-choice="${i}" ${disabled}>${esc(v)}</button>`).join("")}</div><button type="button" id="skip" ${disabled}>スキップ</button></form>`;
+  }
+  if (study.inputMode === "card")
+    return `<form id="answer-form"><p class="muted">答えを思い出してからカードをめくりましょう。</p><button class="primary" ${disabled}>カードをめくる</button><button type="button" id="skip" ${disabled}>スキップ</button></form>`;
   return `<form id="answer-form">
     <div class="answer-modes" role="group" aria-label="回答方法">
       <button type="button" data-answer-mode="text" aria-pressed="${!handwriting}" ${disabled}>キーボード</button>
-      <button type="button" data-answer-mode="handwriting" aria-pressed="${handwriting}" ${disabled}>手書き</button>
+      <button type="button" data-answer-mode="handwriting" aria-pressed="${handwriting}" ${disabled}>筆跡を保存</button>
+      <button type="button" data-answer-mode="scribble" aria-pressed="${study.inputMode === "scribble"}" ${disabled}>手書き（Apple Pencil）</button>
     </div>
     ${
       handwriting
@@ -260,7 +321,7 @@ function answerFormHTML() {
       <canvas id="handwriting-answer" class="handwriting-canvas" aria-label="手書きの回答欄" aria-describedby="handwriting-help" aria-disabled="${study.paused}">手書きに対応していない場合はキーボードへ切り替えてください。</canvas>
       <p id="ink-status" class="ink-status" role="status" aria-live="polite"></p>
     </div>`
-        : `<label>あなたの回答<textarea id="answer" lang="${study.direction === "ja-en" ? "en" : "ja"}" autocomplete="off" ${disabled}>${esc(study.answer)}</textarea></label>`
+        : `${study.inputMode === "scribble" ? '<p class="scribble-help">Apple Pencilで下の入力欄に書いてください。iPadOSのスクリブルで文字に変換後、「回答を確認」で採点します。変換した文字は修正できます。</p>' : ""}<label>あなたの回答<textarea id="answer" lang="${study.direction === "ja-en" ? "en" : "ja"}" autocomplete="off" ${disabled}>${esc(study.answer)}</textarea></label>`
     }
     <div class="row"><button class="primary" ${disabled}>回答を確認</button><button type="button" id="skip" ${disabled}>スキップ</button></div>
   </form>`;
@@ -298,7 +359,7 @@ function learn() {
   }
   const item = current(),
     prompt = study.direction === "en-ja" ? item.en : item.ja;
-  app.innerHTML = `<div class="learning">${title("学習", `${study.index + 1} / ${study.queue.length} 問 · ${type(item)} ${item.number} · セクション ${item.section} · ${study.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"}`)}<div class="row between"><span id="timer" aria-live="off"></span><button id="pause">${study.paused ? "再開" : "一時停止"}</button></div><p id="paused" ${study.paused ? "" : "hidden"}>一時停止中です。タイマーは進みません。</p><section class="card learning-card"><p class="prompt">${esc(prompt)}</p><p class="hint" id="hint"></p>${study.phase === "question" ? answerFormHTML() : evaluation()}</section><p class="muted">${study.retried ? "再挑戦中：前の間違いの記録は残ります。" : study.inputMode === "handwriting" ? "筆跡は文字に変換せず、正解と見比べて自己採点します。" : "日本語は自己判定。英語も言い換えの場合は自己判定できます。"}</p><button id="finish" class="danger">ここで終了して結果を見る</button></div>`;
+  app.innerHTML = `<div class="learning">${title("学習", `${study.index + 1} / ${study.queue.length} 問 · ${type(item)} ${item.number} · セクション ${item.section} · ${study.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"}`)}<div class="row between"><span id="timer" aria-live="off"></span><button id="pause">${study.paused ? "再開" : "一時停止"}</button></div><p id="paused" ${study.paused ? "" : "hidden"}>一時停止中です。タイマーは進みません。</p><section class="card learning-card"><p class="prompt">${esc(prompt)}</p><p class="hint" id="hint"></p>${study.phase === "question" ? answerFormHTML() : evaluation()}</section><p class="muted">${study.retried ? "再挑戦中：前の間違いの記録は残ります。" : study.inputMode === "handwriting" ? "筆跡は文字に変換せず、正解と見比べて自己採点します。" : "文字回答は一致率で自動評価。言い換えは自己判定で変更できます。"}</p><button id="finish" class="danger">ここで終了して結果を見る</button></div>`;
   $("#pause").onclick = () => {
     captureAnswer();
     if (!study.paused) advanceClock();
@@ -309,7 +370,7 @@ function learn() {
   $("#finish").onclick = finish;
   if (study.phase === "question") {
     app.querySelectorAll("[data-answer-mode]").forEach((button) => {
-      button.onclick = () => {
+      button.onclick = async () => {
         if (
           study.paused ||
           busy ||
@@ -318,6 +379,10 @@ function learn() {
           return;
         captureAnswer();
         study.inputMode = button.dataset.answerMode;
+        options.answerMode = study.inputMode;
+        await commit((s) => {
+          s.settings.answerMode = study.inputMode;
+        });
         learn();
       };
     });
@@ -345,7 +410,14 @@ function learn() {
         }
       };
       if (!study.paused) input.focus();
-    } else bindHandwriting();
+    } else if (study.inputMode === "handwriting") bindHandwriting();
+    app.querySelectorAll("[data-choice]").forEach(
+      (button) =>
+        (button.onclick = () => {
+          study.answer = study.choices[Number(button.dataset.choice)];
+          submit();
+        }),
+    );
     $("#answer-form").onsubmit = (e) => {
       e.preventDefault();
       submit();
@@ -363,6 +435,21 @@ function learn() {
             next();
         }),
     );
+    if ($("#auto-next"))
+      $("#auto-next").onclick = async () => {
+        const result = study.judgment || answerJudgment();
+        const score =
+          study.inputMode === "choice"
+            ? Number(result.exact)
+            : matchScore(study.answer, result.answers, study.config);
+        if (
+          await recordAttempt(
+            study.timedOut ? 0 : memoryRating(score),
+            study.timedOut ? "timeout" : result.exact ? "correct" : "incorrect",
+          )
+        )
+          next();
+      };
     $("#retry").onclick = async () => {
       const correctness = $("#correctness").value;
       if (await recordAttempt(0, correctness)) {
@@ -370,6 +457,7 @@ function learn() {
         study.elapsed = 0;
         study.hints = 0;
         study.answer = "";
+        study.choices = null;
         study.drawing = emptyDrawing();
         study.retried = true;
         study.timedOut = false;
@@ -413,6 +501,12 @@ function diffHTML(input, expected) {
 function evaluation() {
   const result = study.judgment || answerJudgment();
   const handwritten = study.inputMode === "handwriting";
+  const manual = handwritten || study.inputMode === "card";
+  const score =
+    study.inputMode === "choice"
+      ? Number(result.exact)
+      : matchScore(study.answer, result.answers, study.config);
+  const autoRating = study.timedOut ? 0 : memoryRating(score);
   const status = study.timedOut
     ? "時間切れ"
     : handwritten
@@ -422,7 +516,7 @@ function evaluation() {
         : result.status === "spelling"
           ? "スペルミスの可能性"
           : "意味の一致は自動判断できません。自己判定してください";
-  return `<h2>${status}</h2><p>あなたの回答</p>${handwritten ? drawingHTML(study.drawing, "あなたの手書き回答", "handwriting-review") : `<pre>${esc(study.answer || "（未回答）")}</pre>`}<p>正解候補</p><pre>${result.answers.map(esc).join("\n")}</pre>${handwritten || result.status === "correct" ? "" : diffHTML(study.answer, answerText())}<label>回答の正誤（自己判定で変更できます）<select id="correctness"><option value="correct" ${result.exact && !study.timedOut ? "selected" : ""}>正解</option><option value="incorrect" ${result.status === "spelling" && !study.timedOut ? "selected" : ""}>不正解</option><option value="unknown" ${!result.exact && result.status !== "spelling" && !study.timedOut ? "selected" : ""}>判断保留</option>${study.timedOut ? '<option value="timeout" selected>時間切れ</option>' : ""}</select></label><p>記憶を評価して次へ</p><div class="row">${ratings.map((r, i) => `<button data-rating="${i}" ${study.paused ? "disabled" : ""}>${r}</button>`).join("")}</div><p><button id="retry" ${study.paused ? "disabled" : ""}>覚えてないとして記録し、その場で再挑戦</button></p>`;
+  return `<h2>${study.timedOut ? "時間切れ" : handwritten ? "手書きの回答を見比べましょう" : manual ? "正解と見比べましょう" : `一致率 ${Math.round(score * 100)}% · ${ratings[autoRating]}`}</h2>${manual ? "" : `<p>${status}</p><p class="muted">表記の一致率：90%以上は覚えた、60%以上は微妙。それ未満は覚えていない。意味の一致判定ではありません。</p><button id="auto-next" class="primary" ${study.paused ? "disabled" : ""}>${ratings[autoRating]}として記録して次へ</button>`}<p>あなたの回答</p>${handwritten ? drawingHTML(study.drawing, "あなたの手書き回答", "handwriting-review") : `<pre>${esc(study.answer || "（未回答）")}</pre>`}<p>正解候補</p><pre>${result.answers.map(esc).join("\n")}</pre>${handwritten || result.status === "correct" ? "" : diffHTML(study.answer, answerText())}<label>回答の正誤（自己判定で変更できます）<select id="correctness"><option value="correct" ${result.exact && !study.timedOut ? "selected" : ""}>正解</option><option value="incorrect" ${!manual && !result.exact && !study.timedOut ? "selected" : ""}>不正解</option><option value="unknown" ${manual && !result.exact && !study.timedOut ? "selected" : ""}>判断保留</option>${study.timedOut ? '<option value="timeout" selected>時間切れ</option>' : ""}</select></label><p>記憶を評価して次へ</p><div class="row">${ratings.map((r, i) => `<button data-rating="${i}" ${study.paused ? "disabled" : ""}>${r}</button>`).join("")}</div><p><button id="retry" ${study.paused ? "disabled" : ""}>覚えてないとして記録し、その場で再挑戦</button></p>`;
 }
 async function recordAttempt(rating, correctness) {
   if (study.paused || busy) return false;
@@ -445,6 +539,7 @@ async function recordAttempt(rating, correctness) {
       correctness,
       rating: rating ?? 0,
       hints: study.hints,
+      hintUnit: "word",
       at,
       retry: study.retried,
       direction: study.direction,
@@ -470,6 +565,7 @@ function next() {
   }
   Object.assign(study, {
     phase: "question",
+    choices: null,
     elapsed: 0,
     lastTick: performance.now(),
     hints: 0,
@@ -504,7 +600,7 @@ function advanceClock() {
   if (!s.paused && s.phase === "question") {
     if (s.config.hints && s.elapsed >= s.config.hintStart)
       s.hints = Math.min(
-        Array.from(answerText()).length,
+        hintWords(answerText(), s.direction === "ja-en" ? "en" : "ja").length,
         1 +
           Math.floor((s.elapsed - s.config.hintStart) / s.config.hintInterval),
       );
@@ -524,7 +620,12 @@ function updateClockUI() {
     ? `残り ${Math.max(0, Math.ceil(study.config.limit - study.elapsed))} 秒`
     : "時間制限なし";
   $("#hint").textContent = study.hints
-    ? `ヒント: ${Array.from(answerText()).slice(0, study.hints).join("")}`
+    ? `ヒント: ${hintWords(
+        answerText(),
+        study.direction === "ja-en" ? "en" : "ja",
+      )
+        .slice(0, study.hints)
+        .join(" ")}`
     : "";
 }
 setInterval(() => {
@@ -554,7 +655,7 @@ function result() {
 }
 function sessionHTML(s) {
   const a = s.attempts;
-  return `<section class="card"><h2>${fmt(s.started)}</h2><p>${s.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"} · ${a.length} 回答 · ${new Set(a.map(identity)).size} 問 · ${s.ended ? "終了" : "途中終了／進行中"}</p><p>正解 ${a.filter((x) => x.correctness === "correct").length} / 不正解 ${a.filter((x) => x.correctness === "incorrect").length} / 保留 ${a.filter((x) => x.correctness === "unknown").length} / スキップ ${a.filter((x) => x.correctness === "skip").length} / 時間切れ ${a.filter((x) => x.correctness === "timeout").length}</p>${a.map((x) => `<details><summary>${type(x)} ${x.number} · ${ratings[x.rating]} · ${{ correct: "正解", incorrect: "不正解", unknown: "保留", skip: "スキップ", timeout: "時間切れ" }[x.correctness]} ${x.retry ? "（再挑戦）" : ""}</summary><p>${fmt(x.at)} · セクション ${x.section} · ヒント ${x.hints} 文字</p><p>問題: ${esc(x.prompt)}</p>${x.inputMode === "handwriting" ? `<p>回答：手書き</p>${drawingHTML(x.drawing, "保存した手書き回答")}` : `<p>回答: ${esc(x.answer || "（未回答）")}</p>`}<p>正解: ${esc(x.correctAnswer)}</p></details>`).join("")}</section>`;
+  return `<section class="card"><h2>${fmt(s.started)}</h2><p>${s.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"} · ${a.length} 回答 · ${new Set(a.map(identity)).size} 問 · ${s.ended ? "終了" : "途中終了／進行中"}</p><p>正解 ${a.filter((x) => x.correctness === "correct").length} / 不正解 ${a.filter((x) => x.correctness === "incorrect").length} / 保留 ${a.filter((x) => x.correctness === "unknown").length} / スキップ ${a.filter((x) => x.correctness === "skip").length} / 時間切れ ${a.filter((x) => x.correctness === "timeout").length}</p>${a.map((x) => `<details><summary>${type(x)} ${x.number} · ${ratings[x.rating]} · ${{ correct: "正解", incorrect: "不正解", unknown: "保留", skip: "スキップ", timeout: "時間切れ" }[x.correctness]} ${x.retry ? "（再挑戦）" : ""}</summary><p>${fmt(x.at)} · セクション ${x.section} · ヒント ${x.hints} ${x.hintUnit === "word" ? "語" : "文字"}</p><p>問題: ${esc(x.prompt)}</p>${x.inputMode === "handwriting" ? `<p>回答：手書き</p>${drawingHTML(x.drawing, "保存した手書き回答")}` : `<p>回答: ${esc(x.answer || "（未回答）")}</p>`}<p>正解: ${esc(x.correctAnswer)}</p></details>`).join("")}</section>`;
 }
 function search(requestedSection) {
   if (requestedSection !== undefined) {
@@ -1024,7 +1125,11 @@ function showPreview() {
       if (p.kind === "backup") {
         study = null;
         lastResult = null;
-        options.answerMode = state.settings.answerMode;
+        options = {
+          ...defaultOptions,
+          ...state.settings.studyOptions,
+          answerMode: state.settings.answerMode,
+        };
       }
       importPreview = null;
       data();
@@ -1172,7 +1277,11 @@ async function init() {
   try {
     state = await openStorage();
     state.settings = { ...defaults, ...state.settings };
-    options.answerMode = state.settings.answerMode;
+    options = {
+      ...defaultOptions,
+      ...state.settings.studyOptions,
+      answerMode: state.settings.answerMode,
+    };
     storageReady = true;
   } catch (e) {
     state = emptyState();

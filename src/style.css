@@ -1076,3 +1076,138 @@ ins {
     animation: none !important;
   }
 }
+
+/* Ice glass: calm blue light, translucent layers and compact study controls. */
+:root {
+  --surface: rgba(235, 247, 255, 0.76);
+  --shadow:
+    0 14px 40px rgba(3, 28, 58, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --radius: 20px;
+  line-height: 1.55;
+}
+body {
+  background:
+    radial-gradient(ellipse at 0 0, #327b9d88, transparent 55%),
+    radial-gradient(ellipse at 100% 50%, #637fbb77, transparent 60%),
+    linear-gradient(145deg, #173b5d, #102942 70%, #142b4a);
+  background-attachment: fixed;
+}
+header {
+  padding-top: calc(22px + env(safe-area-inset-top));
+  padding-bottom: 12px;
+}
+main {
+  padding-top: 14px;
+}
+.card,
+#setup-form,
+#edit-form {
+  backdrop-filter: blur(24px) saturate(130%);
+  -webkit-backdrop-filter: blur(24px) saturate(130%);
+}
+.card {
+  padding: 20px;
+  margin: 14px 0;
+}
+#setup-form,
+#edit-form {
+  padding: 20px;
+  margin: 14px 0;
+}
+.grid {
+  gap: 12px;
+}
+label {
+  margin: 8px 0;
+}
+#setup-form details {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border: 1px solid #486b8f35;
+  border-radius: 12px;
+}
+#setup-form summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+#setup-form fieldset {
+  margin-bottom: 0;
+}
+.learning .prompt {
+  font-size: clamp(21px, 3vw, 30px);
+  margin: 4px 0 16px;
+}
+.learning textarea {
+  min-height: 96px;
+}
+.learning > h1 + .muted,
+#app > h1 + .muted {
+  margin-bottom: 14px;
+}
+.scribble-help {
+  background: #def5ffbb;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+.choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.choice-grid button {
+  white-space: normal;
+  min-height: 64px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+#auto-next {
+  width: 100%;
+}
+@media (max-width: 600px) {
+  header {
+    padding: calc(14px + env(safe-area-inset-top)) 16px 8px;
+  }
+  main {
+    padding: 10px 14px calc(90px + env(safe-area-inset-bottom));
+  }
+  .card,
+  #setup-form,
+  #edit-form {
+    padding: 14px;
+    border-radius: 16px;
+  }
+  #setup-form > .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  h1 {
+    font-size: 24px;
+  }
+  .eyebrow {
+    display: none;
+  }
+  .answer-modes {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .answer-modes button {
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+  .learning-card {
+    margin: 10px 0;
+  }
+}
+
+/* Keep controls and swipe surfaces clear of the floating navigation. */
+html {
+  scroll-padding-bottom: calc(110px + env(safe-area-inset-bottom));
+}
+a.list-item,
+.focus-card .prompt,
+input,
+textarea,
+button {
+  scroll-margin-bottom: calc(110px + env(safe-area-inset-bottom));
+}

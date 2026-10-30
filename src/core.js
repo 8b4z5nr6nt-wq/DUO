@@ -298,7 +298,9 @@ export function validateBackup(raw) {
         throw Error("回答履歴の形式が不正です。");
       if (
         a.inputMode !== undefined &&
-        !["text", "handwriting"].includes(a.inputMode)
+        !["text", "handwriting", "scribble", "choice", "card"].includes(
+          a.inputMode,
+        )
       )
         throw Error("回答方法の形式が不正です。");
       if (a.inputMode === "handwriting") {
@@ -328,7 +330,9 @@ export function validateBackup(raw) {
 export function validateSettings(s) {
   if (
     s.answerMode !== undefined &&
-    !["text", "handwriting"].includes(s.answerMode)
+    !["text", "handwriting", "scribble", "choice", "card"].includes(
+      s.answerMode,
+    )
   )
     throw Error("回答方法は文字入力または手書きを選んでください。");
   for (const [f, min, max] of [
@@ -428,4 +432,46 @@ export function difference(answer, expected) {
     suffix: end ? chars.slice(-end).join("") : "",
   });
   return { answer: split(a), expected: split(b) };
+}
+
+// Surface-form similarity only; no network or semantic inference.
+export function matchScore(answer, answers, settings) {
+  const a = normalize(answer, settings);
+  if (!a) return 0;
+  return Math.max(
+    ...answers.map((value) => {
+      const b = normalize(value, settings);
+      return Math.max(0, 1 - distance(a, b) / Math.max(a.length, b.length, 1));
+    }),
+  );
+}
+export const memoryRating = (score) =>
+  score >= 0.9 ? 2 : score >= 0.6 ? 1 : 0;
+export function hintWords(text, language) {
+  if (language === "en") return text.trim().split(/\s+/u).filter(Boolean);
+  return Array.from(
+    new Intl.Segmenter("ja", { granularity: "word" }).segment(text),
+  )
+    .filter((x) => x.isWordLike)
+    .map((x) => x.segment);
+}
+export function choiceAnswers(item, items, direction, settings) {
+  const field = direction === "en-ja" ? "ja" : "en";
+  const accepted = [
+    item[field],
+    ...(direction === "en-ja" ? item.aliasesJa : item.aliasesEn),
+  ];
+  const distractors = [
+    ...new Map(
+      items
+        .filter((x) => x.kind === item.kind)
+        .map((x) => [normalize(x[field], settings), x[field]]),
+    ).values(),
+  ].filter(
+    (x) =>
+      !accepted.some((a) => normalize(a, settings) === normalize(x, settings)),
+  );
+  return distractors.length < 3
+    ? []
+    : shuffle([item[field], ...shuffle(distractors).slice(0, 3)]);
 }
