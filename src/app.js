@@ -24,6 +24,7 @@ import {
   demoItems,
 } from "./core.js";
 import { openStorage, saveStorage, storageMessage } from "./storage.js";
+const appVersion = __APP_VERSION__;
 const app = document.querySelector("#app");
 const esc = (v) =>
   String(v ?? "").replace(
@@ -1141,7 +1142,7 @@ function settings() {
   const s = state.settings;
   app.innerHTML =
     title("設定", "時間設定は次の学習から反映されます。") +
-    `<form id="settings-form"><section class="card"><label>1日の学習目標（回答数）<input name="goal" type="number" min="1" max="1000" value="${s.goal}" required></label>${timingFields(s)}</section><section class="card"><h2>英語回答の表記ゆれ</h2>${[
+    `<section class="card version-card" aria-labelledby="version-heading"><div><h2 id="version-heading">現在表示中のバージョン</h2><p class="muted">この画面で使用しているDUOのバージョンです。</p></div><strong class="version-number">v${esc(appVersion)}</strong></section><form id="settings-form"><section class="card"><label>1日の学習目標（回答数）<input name="goal" type="number" min="1" max="1000" value="${s.goal}" required></label>${timingFields(s)}</section><section class="card"><h2>英語回答の表記ゆれ</h2>${[
       ["ignoreCase", "大小文字を区別しない"],
       ["ignoreSpaces", "余分な空白をまとめる"],
       ["ignorePunctuation", "句読点を無視する"],

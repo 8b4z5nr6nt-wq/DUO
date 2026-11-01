@@ -1,11 +1,18 @@
 import { defineConfig } from "vite";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+const { version } = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+);
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(version) },
   base: "./",
   plugins: [
     {
       name: "version-offline-cache",
+      transformIndexHtml(html) {
+        return html.replaceAll("%APP_VERSION%", version);
+      },
       writeBundle(options, bundle) {
         const hash = createHash("sha256");
         for (const name of Object.keys(bundle).sort()) {

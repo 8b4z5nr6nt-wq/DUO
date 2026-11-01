@@ -27,8 +27,16 @@
   </head>
   <body>
     <header>
-      <a href="#home" class="brand">DUO <small>PERSONAL STUDY · v0.2.1</small></a
-      ><span id="connection"></span>
+      <div class="brand-group">
+        <a href="#home" class="brand">DUO <small>PERSONAL STUDY</small></a>
+        <a
+          href="#settings"
+          class="version-badge"
+          aria-label="現在のバージョン %APP_VERSION%・設定で確認"
+          >v%APP_VERSION%</a
+        >
+      </div>
+      <span id="connection"></span>
     </header>
     <div id="notice" role="alert" hidden></div>
     <main id="app"></main>
