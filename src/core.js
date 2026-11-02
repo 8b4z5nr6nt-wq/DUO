@@ -99,12 +99,32 @@ export function parseRange(value) {
   }
   return set;
 }
+function selectionSet(ids) {
+  if (ids === undefined || ids === null) return null;
+  if (
+    !Array.isArray(ids) ||
+    ids.length > 10000 ||
+    ids.some(
+      (id) =>
+        typeof id !== "string" ||
+        !/^(sentence|word):[1-9]\d*$/.test(id) ||
+        !Number.isSafeInteger(Number(id.split(":")[1])),
+    )
+  )
+    throw Error("選択した学習範囲の形式が不正です。");
+  const selected = new Set(ids);
+  if (selected.size !== ids.length)
+    throw Error("選択した学習範囲に重複があります。");
+  return selected;
+}
 export function selectItems(state, options) {
   const sections = parseRange(options.sections || ""),
     sentences = parseRange(options.sentences || ""),
-    words = parseRange(options.words || "");
+    words = parseRange(options.words || ""),
+    selected = selectionSet(options.selectedIds);
   return state.items
     .filter((item) => {
+      if (selected && !selected.has(identity(item))) return false;
       if (options.kind !== "all" && item.kind !== options.kind) return false;
       if (sections && !sections.has(item.section)) return false;
       const range = item.kind === "sentence" ? sentences : words;
@@ -328,6 +348,7 @@ export function validateBackup(raw) {
   };
 }
 export function validateSettings(s) {
+  selectionSet(s.studyOptions?.selectedIds);
   if (
     s.answerMode !== undefined &&
     !["text", "handwriting", "scribble", "choice", "card"].includes(

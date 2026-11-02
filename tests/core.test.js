@@ -12,8 +12,10 @@ import {
   shuffle,
   parseCSV,
   validateBackup,
+  validateSettings,
   mergeBackup,
   key,
+  identity,
 } from "../src/core.js";
 test("4種類の方向: 英語一致・表記ゆれ・日本語自己判定・別解", () => {
   const item = demoItems[3];
@@ -86,6 +88,99 @@ test("復習間隔・連続評価・間違い保持", () => {
   assert.equal(good.due, 100 + 7 * 86400000);
   assert.equal(nextRecord(good, 2, [1, 3, 7], 100).due, 100 + 14 * 86400000);
   assert.equal(nextRecord(good, 1, [1, 3, 7], 100).streak, 0);
+});
+test("一覧から選んだ問題だけを種類・番号で区別し、未登録番号と空の選択を扱う", () => {
+  const s = emptyState();
+  s.items = structuredClone(demoItems);
+  s.items[1].number = 7;
+  s.items[1].section = 5;
+  s.items[3].number = 42;
+  s.items[3].section = 9;
+  const options = { kind: "all", direction: "en-ja", filter: "all" };
+  const selectedIds = ["sentence:7", "word:1", "word:42", "sentence:999"];
+  assert.deepEqual(selectItems(s, { ...options, selectedIds }).map(identity), [
+    "word:1",
+    "sentence:7",
+    "word:42",
+  ]);
+  assert.deepEqual(selectItems(s, { ...options, selectedIds: [] }), []);
+  assert.deepEqual(
+    selectItems(s, { ...options, selectedIds: null }),
+    selectItems(s, options),
+  );
+  assert.equal(selectItems(s, options).length, 4);
+  assert.deepEqual(
+    selectItems(s, { ...options, selectedIds, kind: "word" }).map(identity),
+    ["word:1", "word:42"],
+  );
+  assert.deepEqual(
+    selectItems(s, {
+      ...options,
+      selectedIds,
+      sections: "5-9",
+      words: "1",
+    }).map(identity),
+    ["sentence:7"],
+  );
+  s.items[3].favorite = true;
+  assert.deepEqual(
+    selectItems(s, { ...options, selectedIds, filter: "favorite" }).map(
+      identity,
+    ),
+    ["word:42"],
+  );
+});
+test("選択した学習範囲はバックアップで保持し、旧設定と初期化にも対応する", () => {
+  const s = emptyState();
+  s.items = structuredClone(demoItems);
+  assert.deepEqual(
+    validateBackup(JSON.parse(JSON.stringify(s))).settings,
+    s.settings,
+  );
+  for (const selectedIds of [null, [], ["sentence:1", "word:1"]]) {
+    s.settings.studyOptions = { kind: "all", selectedIds };
+    const restored = validateBackup(JSON.parse(JSON.stringify(s)));
+    assert.deepEqual(restored.settings.studyOptions.selectedIds, selectedIds);
+  }
+  const current = emptyState();
+  current.settings.studyOptions = { selectedIds: ["word:2"] };
+  assert.deepEqual(mergeBackup(current, s).settings.studyOptions.selectedIds, [
+    "word:2",
+  ]);
+  s.settings = { ...defaults };
+  assert.equal(
+    selectItems(s, { kind: "all", ...s.settings.studyOptions }).length,
+    4,
+  );
+});
+test("壊れた選択ID・重複・過大な学習範囲は保存と復元時に拒否する", () => {
+  const invalid = [
+    "word:1",
+    {},
+    [1],
+    ["word:0"],
+    ["word:01"],
+    ["sentence:-1"],
+    ["word:1.5"],
+    ["word:9007199254740992"],
+    ["other:1"],
+    ["word:1", "word:1"],
+    Array.from({ length: 10001 }, (_, n) => `word:${n + 1}`),
+  ];
+  for (const selectedIds of invalid) {
+    const settings = { ...defaults, studyOptions: { selectedIds } };
+    assert.throws(() => validateSettings(settings), /学習範囲/);
+    assert.throws(
+      () => validateBackup({ ...emptyState(), settings }),
+      /学習範囲/,
+    );
+  }
+  assert.doesNotThrow(() =>
+    validateSettings({
+      ...defaults,
+      studyOptions: { selectedIds: ["word:9007199254740991"] },
+    }),
+  );
 });
 test("CSV 引用符・改行・別解、番号重複・必須項目", () => {
   const csv =

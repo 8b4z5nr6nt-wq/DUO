@@ -1271,3 +1271,68 @@ button {
     backdrop-filter: none;
   }
 }
+
+/* Select learning questions in the familiar search list. */
+.range-controls {
+  margin: 12px 0;
+}
+.range-controls p {
+  font-size: 13px;
+  margin-bottom: 0;
+}
+.range-toolbar.card {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 12px 16px;
+}
+#selection-count {
+  font-weight: 700;
+}
+.range-bulk {
+  padding: 8px 0;
+}
+.range-item {
+  cursor: pointer;
+  margin: 0;
+  padding: 14px 8px;
+}
+.range-item.selected {
+  background: rgba(219, 255, 240, 0.55);
+}
+.range-item:focus-within {
+  outline: 2px solid #086a75;
+  outline-offset: -2px;
+}
+.range-item input[type="checkbox"] {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  margin: 6px 4px 0 0;
+}
+.range-item .item-number {
+  display: inline-block;
+  margin-bottom: 6px;
+}
+@media (max-width: 600px) {
+  .range-toolbar.card {
+    top: 4px;
+    padding: 10px;
+  }
+  .range-toolbar button,
+  .range-bulk button {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .range-toolbar .row {
+    gap: 6px;
+  }
+  .range-item .item-en {
+    font-size: 16px;
+  }
+}

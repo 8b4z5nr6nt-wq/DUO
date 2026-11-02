@@ -88,7 +88,10 @@ const defaultOptions = {
   order: "number",
   count: "",
   answerMode: "text",
+  selectedIds: null,
 };
+let rangeDraft = null;
+let rangeBrowse = { kind: "sentence", section: null, query: "" };
 let options = { ...defaultOptions };
 function notify(text, tone = "error") {
   const el = document.querySelector("#notice");
@@ -145,7 +148,7 @@ function home() {
 function setup() {
   app.innerHTML =
     title("学習設定", "未登録の番号は対象外になります。") +
-    `${study ? '<p><a class="button" href="#learn">途中の学習に戻る</a></p>' : ""}<form id="setup-form"><div class="grid"><label>種類<select name="kind"><option value="sentence">例文</option><option value="word">単語</option><option value="all">例文と単語</option></select></label><label>出題方向<select name="direction"><option value="en-ja">英語 → 日本語</option><option value="ja-en">日本語 → 英語</option></select></label></div><label>回答方法<select name="answerMode"><option value="text">キーボード</option><option value="scribble">手書き（Apple Pencil）・スクリブル自動採点</option><option value="choice">4択問題</option><option value="card">カード形式</option><option value="handwriting">筆跡を保存（Apple Pencil・指／自己採点）</option></select></label><p class="muted">iPadOSのスクリブルを有効にし、回答欄にApple Pencilで書くと、変換された文字を自動採点します。4択には同じ種類の異なる答えが4件以上必要です。</p><details><summary>範囲を指定</summary><fieldset><legend>番号で範囲指定（空欄は全範囲）</legend><label>セクション<input name="sections" placeholder="例: 1-5,8"></label><div class="grid"><label>例文番号<input name="sentences" placeholder="例: 1-20"></label><label>単語番号<input name="words" placeholder="例: 1-50"></label></div></fieldset></details><div class="grid"><label>絞り込み<select name="filter"><option value="all">登録済みすべて</option><option value="weak">苦手（微妙・覚えてない）</option><option value="due">復習期限が来た問題</option><option value="favorite">お気に入り</option><option value="review">要復習マーク</option></select></label><label>順序<select name="order"><option value="number">番号順</option><option value="random">ランダム</option></select></label><label>問題数（空欄は全問）<input type="number" name="count" min="1" max="10000" placeholder="全問"></label></div><details><summary>タイマー・ヒント</summary><fieldset><legend>時間設定</legend>${timingFields(state.settings)}</fieldset></details><p id="target-count" aria-live="polite"></p><button class="primary" type="submit">学習を開始</button><button type="button" id="reset-study">学習設定を初期化</button></form>`;
+    `${study ? '<p><a class="button" href="#learn">途中の学習に戻る</a></p>' : ""}<form id="setup-form"><div class="grid"><label>種類<select name="kind"><option value="sentence">例文</option><option value="word">単語</option><option value="all">例文と単語</option></select></label><label>出題方向<select name="direction"><option value="en-ja">英語 → 日本語</option><option value="ja-en">日本語 → 英語</option></select></label></div><label>回答方法<select name="answerMode"><option value="text">キーボード</option><option value="scribble">手書き（Apple Pencil）・スクリブル自動採点</option><option value="choice">4択問題</option><option value="card">カード形式</option><option value="handwriting">筆跡を保存（Apple Pencil・指／自己採点）</option></select></label><p class="muted">iPadOSのスクリブルを有効にし、回答欄にApple Pencilで書くと、変換された文字を自動採点します。4択には同じ種類の異なる答えが4件以上必要です。</p><div class="range-controls"><div class="row between"><button type="button" id="choose-range">範囲を選択</button><button type="button" id="clear-range">全範囲に戻す</button></div><p id="range-summary" class="muted" aria-live="polite"></p></div><details><summary>番号を入力して範囲指定</summary><fieldset><legend>番号で範囲指定（空欄は全範囲）</legend><label>セクション<input name="sections" placeholder="例: 1-5,8"></label><div class="grid"><label>例文番号<input name="sentences" placeholder="例: 1-20"></label><label>単語番号<input name="words" placeholder="例: 1-50"></label></div></fieldset></details><div class="grid"><label>絞り込み<select name="filter"><option value="all">登録済みすべて</option><option value="weak">苦手（微妙・覚えてない）</option><option value="due">復習期限が来た問題</option><option value="favorite">お気に入り</option><option value="review">要復習マーク</option></select></label><label>順序<select name="order"><option value="number">番号順</option><option value="random">ランダム</option></select></label><label>問題数（空欄は全問）<input type="number" name="count" min="1" max="10000" placeholder="全問"></label></div><details><summary>タイマー・ヒント</summary><fieldset><legend>時間設定</legend>${timingFields(state.settings)}</fieldset></details><p id="target-count" aria-live="polite"></p><button class="primary" type="submit">学習を開始</button><button type="button" id="reset-study">学習設定を初期化</button></form>`;
   $("#reset-study").onclick = async () => {
     if (
       await commit((s) => {
@@ -162,53 +165,87 @@ function setup() {
   };
   const form = $("#setup-form");
   let pendingSave = Promise.resolve();
-  for (const [k, v] of Object.entries(options)) form.elements[k].value = v;
+  for (const [k, v] of Object.entries(options))
+    if (form.elements[k]) form.elements[k].value = v;
   const read = () => {
-    options = Object.fromEntries(
-      [
-        "kind",
-        "direction",
-        "sections",
-        "sentences",
-        "words",
-        "filter",
-        "order",
-        "count",
-        "answerMode",
-      ].map((k) => [k, form.elements[k].value]),
-    );
+    options = {
+      ...options,
+      ...Object.fromEntries(
+        [
+          "kind",
+          "direction",
+          "sections",
+          "sentences",
+          "words",
+          "filter",
+          "order",
+          "count",
+          "answerMode",
+        ].map((k) => [k, form.elements[k].value]),
+      ),
+    };
     return selectItems(state, options);
   };
   const update = () => {
     try {
       const n = read().length;
+      const ids = options.selectedIds && new Set(options.selectedIds);
+      const chosen = ids && state.items.filter((i) => ids.has(identity(i)));
+      $("#range-summary").textContent = chosen
+        ? `一覧から ${chosen.length} 問選択（例文 ${chosen.filter((i) => i.kind === "sentence").length} / 単語 ${chosen.filter((i) => i.kind === "word").length}）。種類・絞り込みは下の対象数に反映されます。`
+        : [options.sections, options.sentences, options.words].some(Boolean)
+          ? "番号で指定した範囲を使用中です。"
+          : "全範囲から出題します。一覧で問題を選べます。";
       $("#target-count").textContent =
         `対象 ${n} 問 / 出題 ${Math.min(n, Number(options.count) || n)} 問`;
-      form.querySelector("button").disabled = n === 0;
+      form.querySelector('[type="submit"]').disabled = n === 0;
     } catch (e) {
       $("#target-count").textContent = e.message;
-      form.querySelector("button").disabled = true;
+      form.querySelector('[type="submit"]').disabled = true;
     }
   };
-  form.addEventListener("input", update);
-  form.addEventListener("input", () => {
-    pendingSave = pendingSave.then(async () => {
-      try {
-        read();
-        const saved = {
-          ...readTiming(form, state.settings),
-          answerMode: options.answerMode,
-          studyOptions: { ...options },
-        };
-        validateSettings(saved);
-        await commit((s) => {
-          s.settings = saved;
-        });
-      } catch (e) {
-        notify(e.message);
-      }
+  const saveSetup = async () => {
+    read();
+    const saved = {
+      ...readTiming(form, state.settings),
+      answerMode: options.answerMode,
+      studyOptions: { ...options },
+    };
+    validateSettings(saved);
+    return commit((s) => {
+      s.settings = saved;
+    });
+  };
+  form.addEventListener("input", (event) => {
+    if (["sections", "sentences", "words"].includes(event.target.name))
+      options.selectedIds = null;
+    update();
+    pendingSave = pendingSave.then(saveSetup).catch((e) => {
+      notify(e.message);
+      return false;
     });
   });
+  $("#choose-range").onclick = async () => {
+    try {
+      await pendingSave;
+      if (!(await saveSetup())) return;
+      rangeDraft = null;
+      location.hash = "pick-range";
+    } catch (e) {
+      notify(e.message);
+    }
+  };
+  $("#clear-range").onclick = async () => {
+    await pendingSave;
+    options.selectedIds = null;
+    for (const field of ["sections", "sentences", "words"])
+      form.elements[field].value = "";
+    try {
+      if (await saveSetup()) update();
+    } catch (e) {
+      notify(e.message);
+    }
+  };
   update();
   form.onsubmit = async (e) => {
     e.preventDefault();
@@ -658,7 +695,29 @@ function sessionHTML(s) {
   const a = s.attempts;
   return `<section class="card"><h2>${fmt(s.started)}</h2><p>${s.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"} · ${a.length} 回答 · ${new Set(a.map(identity)).size} 問 · ${s.ended ? "終了" : "途中終了／進行中"}</p><p>正解 ${a.filter((x) => x.correctness === "correct").length} / 不正解 ${a.filter((x) => x.correctness === "incorrect").length} / 保留 ${a.filter((x) => x.correctness === "unknown").length} / スキップ ${a.filter((x) => x.correctness === "skip").length} / 時間切れ ${a.filter((x) => x.correctness === "timeout").length}</p>${a.map((x) => `<details><summary>${type(x)} ${x.number} · ${ratings[x.rating]} · ${{ correct: "正解", incorrect: "不正解", unknown: "保留", skip: "スキップ", timeout: "時間切れ" }[x.correctness]} ${x.retry ? "（再挑戦）" : ""}</summary><p>${fmt(x.at)} · セクション ${x.section} · ヒント ${x.hints} ${x.hintUnit === "word" ? "語" : "文字"}</p><p>問題: ${esc(x.prompt)}</p>${x.inputMode === "handwriting" ? `<p>回答：手書き</p>${drawingHTML(x.drawing, "保存した手書き回答")}` : `<p>回答: ${esc(x.answer || "（未回答）")}</p>`}<p>正解: ${esc(x.correctAnswer)}</p></details>`).join("")}</section>`;
 }
-function search(requestedSection) {
+function pickRange() {
+  if (!rangeDraft) {
+    const registered = new Set(state.items.map(identity));
+    const previous =
+      options.selectedIds ??
+      ([options.sections, options.sentences, options.words].some(Boolean)
+        ? selectItems(state, { ...options, filter: "all" }).map(identity)
+        : []);
+    rangeDraft = new Set(previous.filter((id) => registered.has(id)));
+    rangeBrowse = {
+      kind: options.kind === "word" ? "word" : "sentence",
+      section: null,
+      query: "",
+    };
+  }
+  search(undefined, true);
+}
+function selectionRow(i) {
+  const id = identity(i);
+  return `<label class="list-item range-item${rangeDraft.has(id) ? " selected" : ""}"><input type="checkbox" data-pick-id="${id}" aria-label="${type(i)} ${i.number}を選択" ${rangeDraft.has(id) ? "checked" : ""}><span class="item-body"><span class="item-number">${type(i)}${String(i.number).padStart(3, "0")}</span><span class="item-en">${esc(i.en)}</span><span class="item-ja">${esc(i.ja)}</span><span class="item-meta">セクション ${i.section}</span></span></label>`;
+}
+function search(requestedSection, picking = false) {
+  const view = picking ? rangeBrowse : browse;
   if (requestedSection !== undefined) {
     const n = Number(requestedSection);
     if (!state.items.some((i) => i.section === n)) {
@@ -672,28 +731,36 @@ function search(requestedSection) {
         link("search", "一覧へ");
       return;
     }
-    browse.section = n;
-    browse.query = "";
+    view.section = n;
+    view.query = "";
   }
   app.innerHTML =
-    title("検索・一覧", "1セクションずつ、左右にめくって探せます。") +
-    `<div class="browse-modes" role="group" aria-label="表示モード"><button class="browse-mode" data-mode="sentence" aria-pressed="${browse.kind === "sentence"}">例文モード</button><button class="browse-mode" data-mode="word" aria-pressed="${browse.kind === "word"}">単語モード</button></div><div class="search-tools card"><label>番号・英語・日本語<input id="query" type="search" placeholder="選んだモードの全セクションから検索" value="${esc(browse.query)}"></label></div><p class="search-summary" role="status" aria-live="polite"></p><section class="section-browser card" aria-label="セクションごとの一覧"><div class="section-controls"><button id="section-previous" aria-label="前のセクション">← 前へ</button><span class="section-position" aria-label="セクションの位置"></span><button id="section-next" aria-label="次のセクション">次へ →</button></div><div class="section-tabs" role="group" aria-label="セクションを選択"></div><p class="section-hint muted">一覧を左右にスワイプするとセクションが変わります。</p><div id="list"></div></section>`;
+    title(
+      picking ? "学習範囲を選択" : "検索・一覧",
+      picking
+        ? "チェックで選択。検索やセクションを変えても選択は残ります。"
+        : "1セクションずつ、左右にめくって探せます。",
+    ) +
+    (picking
+      ? `<div class="range-toolbar card"><span id="selection-count" role="status" aria-live="polite"></span><div class="row"><button id="confirm-range" class="primary">選択を確定</button><button id="cancel-range">キャンセル</button></div><button id="clear-selection">選択を全解除</button></div>`
+      : "") +
+    `<div class="browse-modes" role="group" aria-label="表示モード"><button class="browse-mode" data-mode="sentence" aria-pressed="${view.kind === "sentence"}">例文モード</button><button class="browse-mode" data-mode="word" aria-pressed="${view.kind === "word"}">単語モード</button></div><div class="search-tools card"><label>番号・英語・日本語<input id="query" type="search" placeholder="選んだモードの全セクションから検索" value="${esc(view.query)}"></label></div><p class="search-summary" role="status" aria-live="polite"></p><section class="section-browser card" aria-label="セクションごとの一覧"><div class="section-controls"><button id="section-previous" aria-label="前のセクション">← 前へ</button><span class="section-position" aria-label="セクションの位置"></span><button id="section-next" aria-label="次のセクション">次へ →</button></div><div class="section-tabs" role="group" aria-label="セクションを選択"></div><p class="section-hint muted">${picking ? "セクションやモードを切り替えて、学ぶ問題にチェックしてください。" : "一覧を左右にスワイプするとセクションが変わります。"}</p>${picking ? '<div class="row range-bulk"><button id="select-visible">表示中を全選択</button><button id="deselect-visible">表示中を解除</button></div>' : ""}<div id="list"></div></section>`;
   let sections = [];
   const move = (step) => {
-    const index = sections.indexOf(browse.section);
+    const index = sections.indexOf(view.section);
     const next = sections[index + step];
     if (index < 0 || next === undefined) return false;
     const tabHadFocus = document.activeElement?.closest(".section-tabs");
-    browse.section = next;
+    view.section = next;
     update();
     if (tabHadFocus)
-      $(`[data-section="${browse.section}"]`)?.focus({ preventScroll: true });
+      $(`[data-section="${view.section}"]`)?.focus({ preventScroll: true });
     return true;
   };
   const update = () => {
-    const q = browse.query.trim().toLowerCase();
+    const q = view.query.trim().toLowerCase();
     const numberQuery = /^\d+$/.test(q) ? q.replace(/^0+(?=\d)/, "") : q;
-    const registered = state.items.filter((i) => i.kind === browse.kind);
+    const registered = state.items.filter((i) => i.kind === view.kind);
     const matches = registered.filter(
       (i) =>
         !q ||
@@ -705,20 +772,19 @@ function search(requestedSection) {
     sections = [
       ...new Set((q ? matches : state.items).map((i) => i.section)),
     ].sort((a, b) => a - b);
-    if (!sections.includes(browse.section))
-      browse.section = sections[0] ?? null;
-    const index = sections.indexOf(browse.section);
-    const label = browse.kind === "sentence" ? "例文" : "単語・熟語";
+    if (!sections.includes(view.section)) view.section = sections[0] ?? null;
+    const index = sections.indexOf(view.section);
+    const label = view.kind === "sentence" ? "例文" : "単語・熟語";
     const rows = matches
-      .filter((i) => i.section === browse.section)
+      .filter((i) => i.section === view.section)
       .sort((a, b) => a.number - b.number);
-    const total = registered.filter((i) => i.section === browse.section).length;
+    const total = registered.filter((i) => i.section === view.section).length;
     app
       .querySelectorAll("[data-mode]")
       .forEach((button) =>
         button.setAttribute(
           "aria-pressed",
-          String(button.dataset.mode === browse.kind),
+          String(button.dataset.mode === view.kind),
         ),
       );
     $(".search-summary").textContent =
@@ -729,14 +795,14 @@ function search(requestedSection) {
     $(".section-tabs").innerHTML = sections
       .map(
         (n) =>
-          `<button data-section="${n}" aria-label="セクション ${n}"${n === browse.section ? ' aria-current="true"' : ""}>SECTION ${String(n).padStart(2, "0")}</button>`,
+          `<button data-section="${n}" aria-label="セクション ${n}"${n === view.section ? ' aria-current="true"' : ""}>SECTION ${String(n).padStart(2, "0")}</button>`,
       )
       .join("");
     app.querySelectorAll("[data-section]").forEach((button) => {
       button.onclick = () => {
-        browse.section = Number(button.dataset.section);
+        view.section = Number(button.dataset.section);
         update();
-        $(`[data-section="${browse.section}"]`)?.focus({ preventScroll: true });
+        $(`[data-section="${view.section}"]`)?.focus({ preventScroll: true });
       };
     });
     const tabs = $(".section-tabs");
@@ -752,21 +818,96 @@ function search(requestedSection) {
         ? `条件に合う${label}がありません。`
         : `このセクションの${label}はまだ登録されていません。`;
     $("#list").innerHTML =
-      `<section class="section-stage library-group" data-kind="${browse.kind}" data-swipe-surface aria-label="${browse.section === null ? "検索結果" : `セクション ${browse.section}の${label}`}" aria-live="polite"><div class="section-heading"><h2>${browse.section === null ? "検索結果" : `セクション ${browse.section}`}</h2><span class="library-count">${rows.length} / ${total} 件</span></div><div class="library-items">${rows.length ? rows.map(itemLink).join("") : `<div class="empty"><p>${empty}</p><p class="muted">${q ? "検索する言葉や番号を変えてみてください。" : "ほかのセクション・モードを選ぶか、データ画面から登録できます。"}</p></div>`}</div></section>`;
+      `<section class="section-stage library-group" data-kind="${view.kind}" data-swipe-surface aria-label="${view.section === null ? "検索結果" : `セクション ${view.section}の${label}`}" aria-live="polite"><div class="section-heading"><h2>${view.section === null ? "検索結果" : `セクション ${view.section}`}</h2><span class="library-count">${rows.length} / ${total} 件</span></div><div class="library-items">${rows.length ? rows.map(picking ? selectionRow : itemLink).join("") : `<div class="empty"><p>${empty}</p><p class="muted">${q ? "検索する言葉や番号を変えてみてください。" : "ほかのセクション・モードを選ぶか、データ画面から登録できます。"}</p></div>`}</div></section>`;
+    if (picking) {
+      const updateSelection = () => {
+        $("#selection-count").textContent = `${rangeDraft.size} 問を選択中`;
+        $("#confirm-range").disabled = rangeDraft.size === 0;
+        $("#clear-selection").disabled = rangeDraft.size === 0;
+        $("#select-visible").disabled =
+          !rows.length || rows.every((i) => rangeDraft.has(identity(i)));
+        $("#deselect-visible").disabled = !rows.some((i) =>
+          rangeDraft.has(identity(i)),
+        );
+        app.querySelectorAll("[data-pick-id]").forEach((input) => {
+          input.checked = rangeDraft.has(input.dataset.pickId);
+          input
+            .closest(".range-item")
+            .classList.toggle("selected", input.checked);
+        });
+      };
+      app.querySelectorAll("[data-pick-id]").forEach(
+        (input) =>
+          (input.onchange = () => {
+            if (input.checked) rangeDraft.add(input.dataset.pickId);
+            else rangeDraft.delete(input.dataset.pickId);
+            updateSelection();
+          }),
+      );
+      $("#select-visible").onclick = () => {
+        rows.forEach((i) => rangeDraft.add(identity(i)));
+        updateSelection();
+      };
+      $("#deselect-visible").onclick = () => {
+        rows.forEach((i) => rangeDraft.delete(identity(i)));
+        updateSelection();
+      };
+      $("#clear-selection").onclick = () => {
+        rangeDraft.clear();
+        updateSelection();
+      };
+      updateSelection();
+    }
     activeNavigation = { previous: () => move(-1), next: () => move(1) };
   };
   $("#query").oninput = () => {
-    browse.query = $("#query").value;
+    view.query = $("#query").value;
     update();
   };
   app.querySelectorAll("[data-mode]").forEach((button) => {
     button.onclick = () => {
-      browse.kind = button.dataset.mode;
+      view.kind = button.dataset.mode;
       update();
     };
   });
   $("#section-previous").onclick = () => move(-1);
   $("#section-next").onclick = () => move(1);
+  if (picking) {
+    $("#cancel-range").onclick = () => {
+      rangeDraft = null;
+      location.hash = "setup";
+    };
+    $("#confirm-range").onclick = async () => {
+      if (busy || !rangeDraft.size) return;
+      const selectedIds = state.items
+        .filter((i) => rangeDraft.has(identity(i)))
+        .map(identity);
+      if (selectedIds.length > 10000) {
+        notify(
+          "1回に選択できる学習範囲は10000問までです。選択を減らしてください。",
+        );
+        return;
+      }
+      const kinds = new Set(selectedIds.map((id) => id.split(":")[0]));
+      const chosenOptions = {
+        ...options,
+        selectedIds,
+        kind: kinds.size === 2 ? "all" : [...kinds][0],
+        sections: "",
+        sentences: "",
+        words: "",
+      };
+      if (
+        await commit((s) => {
+          s.settings.studyOptions = chosenOptions;
+        })
+      ) {
+        options = chosenOptions;
+        rangeDraft = null;
+        location.hash = "setup";
+      }
+    };
+  }
   update();
 }
 function itemLink(i) {
@@ -1208,11 +1349,12 @@ function render() {
   if (document.querySelector("#notice").dataset.tone === "success") notify("");
   activeNavigation = null;
   const [route = "home", ...parts] = location.hash.slice(1).split("/");
-  const navRoute = ["detail", "section"].includes(route)
+  const navRoute = ["detail", "section", "pick-range"].includes(route)
     ? "search"
     : ["learn", "result"].includes(route)
       ? "setup"
       : route;
+  if (route !== "pick-range") rangeDraft = null;
   if (route !== "detail") detailNavigationFocus = null;
   if (study && route !== "learn") pauseForLeaving();
   disposeCanvases();
@@ -1226,6 +1368,7 @@ function render() {
       learn,
       result,
       search,
+      "pick-range": pickRange,
       progress,
       data,
       settings,
