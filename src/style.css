@@ -1336,3 +1336,28 @@ button {
     font-size: 16px;
   }
 }
+
+.update-banner:not([hidden]) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  max-width: 1056px;
+  margin: 8px auto;
+  padding: 12px 16px;
+  background: #dff6ec;
+  color: #153b46;
+  border-radius: 16px;
+  border: 1px solid #fff9;
+}
+.update-banner p {
+  margin: 0;
+  font-size: 14px;
+  flex: 1 1 240px;
+}
+@media (max-width: 1120px) {
+  .update-banner:not([hidden]) {
+    margin-inline: 14px;
+  }
+}

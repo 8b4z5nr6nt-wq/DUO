@@ -55,6 +55,9 @@ function reply(text, status, headers = {}) {
 function redirect(location) {
   return reply(null, 303, { Location: location });
 }
+function freshAppURL(origin) {
+  return `${origin}/?duo-update=${crypto.randomUUID()}`;
+}
 function cookie(name, value, seconds) {
   return `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${seconds}`;
 }
@@ -326,7 +329,7 @@ export function createHandler(fetchGithub = fetch) {
           if (String(owner.id) !== config.id) throw Error("not owner");
           failure = "DUO-A12";
           // The GitHub token is used only above; neither browser cookies nor storage retain it.
-          response = redirect(config.origin + "/");
+          response = redirect(freshAppURL(config.origin));
           response.headers.append(
             "Set-Cookie",
             cookie(
@@ -352,6 +355,20 @@ export function createHandler(fetchGithub = fetch) {
         response.headers.append("Set-Cookie", cookie(SESSION, "", 0));
         response.headers.append("Set-Cookie", cookie(STATE, "", 0));
         return response;
+      }
+      if (url.pathname === "/auth/refresh") {
+        if (!["GET", "HEAD"].includes(request.method))
+          return reply("この操作はGETで行ってください。", 405, {
+            Allow: "GET, HEAD",
+          });
+        try {
+          const session = getCookie(request, SESSION);
+          if (!session) throw Error("no session");
+          await verify(config, "session", session);
+          return redirect(freshAppURL(config.origin));
+        } catch {
+          return redirect(config.origin + "/auth/login");
+        }
       }
       if (url.pathname.startsWith("/auth/"))
         return reply("ページがありません。", 404);

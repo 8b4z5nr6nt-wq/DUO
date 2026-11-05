@@ -84,6 +84,7 @@ try {
   await page.getByLabel("番号・英語・日本語").fill("moon");
   assert.match(await page.locator("#list").textContent(), /月の庭/);
   await page.getByRole("link", { name: "学習", exact: true }).click();
+  await page.getByText("タイマー・ヒント", { exact: true }).click();
   await page.getByLabel("時間制限を使う").uncheck();
   await page.getByLabel("ヒントを使う").uncheck();
   await page.getByLabel("問題数（空欄は全問）").fill("1");

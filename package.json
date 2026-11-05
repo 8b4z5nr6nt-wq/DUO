@@ -1,6 +1,6 @@
 {
   "name": "duo-personal-pwa",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,6 +11,7 @@
     "test:e2e": "playwright test",
     "test:pages": "node scripts/check-pages.mjs",
     "cloudflare:check": "wrangler deploy --dry-run --outdir /tmp/duo-worker-build",
+    "test:update": "node scripts/check-update.mjs",
     "test:private": "node scripts/check-private.mjs",
     "test:oauth-runtime": "node scripts/check-oauth-runtime.mjs",
     "deploy:private": "node scripts/deploy-private.mjs"

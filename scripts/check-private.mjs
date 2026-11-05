@@ -103,9 +103,9 @@ try {
   );
   server.stdout.on("data", (b) => (logs = (logs + b).slice(-6000)));
   server.stderr.on("data", (b) => (logs = (logs + b).slice(-6000)));
-  const health = () =>
+  const health = (path = "/") =>
     new Promise((done, reject) => {
-      const req = httpsRequest(origin, { ca, timeout: 1000 }, (res) => {
+      const req = httpsRequest(origin + path, { ca, timeout: 1000 }, (res) => {
         res.resume();
         done(res.statusCode);
       });
@@ -188,11 +188,14 @@ try {
     },
   ]);
   const page = await owner.newPage();
+  page.setDefaultTimeout(15000);
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto(origin + "/#data");
-  await page.getByRole("button", { name: "開発用の架空データを追加" }).click();
-  await page.getByText("4 件登録済み").waitFor();
+  const refreshed = await page.goto(origin + "/auth/refresh");
+  assert.equal(refreshed.status(), 200);
+  assert.equal(new URL(page.url()).origin, origin);
+  assert.ok(new URL(page.url()).searchParams.get("duo-update"));
+  await page.getByRole("heading", { name: "今日の一歩を。" }).waitFor();
   await page.waitForFunction(() =>
     document
       .querySelector("#connection")
@@ -207,6 +210,9 @@ try {
         }),
       );
   });
+  await page.goto(origin + "/#data");
+  await page.getByRole("button", { name: "開発用の架空データを追加" }).click();
+  await page.getByText("4 件登録済み").waitFor();
   await owner.setOffline(true);
   await page.reload();
   await page.getByText("4 件登録済み").waitFor();
@@ -215,6 +221,7 @@ try {
   await page.getByLabel("番号・英語・日本語").fill("moon");
   assert.match(await page.locator("#list").textContent(), /月の庭/);
   await page.getByRole("link", { name: "学習", exact: true }).click();
+  await page.getByText("タイマー・ヒント", { exact: true }).click();
   await page.getByLabel("時間制限を使う").uncheck();
   await page.getByLabel("ヒントを使う").uncheck();
   await page.getByLabel("問題数（空欄は全問）").fill("1");
@@ -240,20 +247,22 @@ try {
   );
   await owner.setOffline(false);
   await owner.clearCookies();
+  const expired = await page.reload();
+  assert.equal(expired.status(), 401);
+  await page
+    .getByRole("link", { name: "GitHubでログイン", exact: true })
+    .waitFor();
+  assert.equal(await page.locator("script[src]").count(), 0);
+  // The login document intentionally disallows fetch via CSP; verify its route
+  // directly with the trusted local certificate without following GitHub's URL.
+  assert.equal(await health("/auth/login"), 303);
+  await owner.setOffline(true);
   await page.reload();
-  assert.equal(
-    await page.getByRole("heading", { name: "学習結果" }).count(),
-    1,
-  );
-  assert.equal(
-    await page.evaluate(() =>
-      fetch("/auth/login", { redirect: "manual" }).then((r) => r.type),
-    ),
-    "opaqueredirect",
-  );
+  await page.getByRole("heading", { name: "学習結果" }).waitFor();
+  assert.match(await page.locator("main").textContent(), /正解 1/);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: local Worker rejects anonymous assets, renders safe login recovery, accepts signed owner cookie, preserves offline study/history, keeps OAuth network-only",
+    "PASS: local Worker rejects anonymous assets, refreshes owner sessions, surfaces expired auth online, preserves offline study/history, keeps OAuth network-only",
   );
 } finally {
   await browser?.close();

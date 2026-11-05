@@ -18,5 +18,6 @@ jobs:
       - run: npm run cloudflare:check
       - run: npm run test:oauth-runtime
       - run: npx playwright install --with-deps chromium
+      - run: npm run test:update
       - run: npm run test:pages
       - run: npm run test:private

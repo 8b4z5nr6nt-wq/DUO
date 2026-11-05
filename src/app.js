@@ -1283,7 +1283,7 @@ function settings() {
   const s = state.settings;
   app.innerHTML =
     title("設定", "時間設定は次の学習から反映されます。") +
-    `<section class="card version-card" aria-labelledby="version-heading"><div><h2 id="version-heading">現在表示中のバージョン</h2><p class="muted">この画面で使用しているDUOのバージョンです。</p></div><strong class="version-number">v${esc(appVersion)}</strong></section><form id="settings-form"><section class="card"><label>1日の学習目標（回答数）<input name="goal" type="number" min="1" max="1000" value="${s.goal}" required></label>${timingFields(s)}</section><section class="card"><h2>英語回答の表記ゆれ</h2>${[
+    `<section class="card version-card" aria-labelledby="version-heading"><div><h2 id="version-heading">現在表示中のバージョン</h2><p class="muted">この画面で使用しているDUOのバージョンです。</p></div><strong class="version-number">v${esc(appVersion)}</strong><a class="button" href="/auth/refresh" data-refresh-app>最新版を開く</a><p class="muted">更新には通信と、必要に応じてGitHubでの再ログインを使います。保存済みの学習データは保持されます。</p></section><form id="settings-form"><section class="card"><label>1日の学習目標（回答数）<input name="goal" type="number" min="1" max="1000" value="${s.goal}" required></label>${timingFields(s)}</section><section class="card"><h2>英語回答の表記ゆれ</h2>${[
       ["ignoreCase", "大小文字を区別しない"],
       ["ignoreSpaces", "余分な空白をまとめる"],
       ["ignorePunctuation", "句読点を無視する"],
@@ -1407,9 +1407,19 @@ document.addEventListener("keydown", (event) => {
   if (action && activeNavigation[action]()) event.preventDefault();
 });
 document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-refresh-app]") && (study || busy)) {
+    event.preventDefault();
+    notify("途中の学習を記録して終了し、保存が完了してから更新してください。");
+    return;
+  }
   const anchor = event.target.closest('a[href^="#"]');
   if (anchor && anchor.hash !== "#learn") pauseForLeaving();
 });
+function updateNotice(message) {
+  const notice = document.querySelector("#app-update");
+  notice.querySelector("p").textContent = message;
+  notice.hidden = false;
+}
 let offlineReady = false;
 function connection() {
   document.querySelector("#connection").textContent =
@@ -1435,16 +1445,44 @@ async function init() {
   connection();
   if ("serviceWorker" in navigator && import.meta.env.PROD) {
     try {
-      await navigator.serviceWorker.register(
+      let hadController = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (hadController)
+          updateNotice(
+            "更新の準備ができました。学習を記録したあと、最新版を開いてください。",
+          );
+        hadController = true;
+      });
+      const registration = await navigator.serviceWorker.register(
         `${import.meta.env.BASE_URL}sw.js`,
+        { updateViaCache: "none" },
       );
+      if (registration.active)
+        registration.update().catch(() => {
+          if (navigator.onLine)
+            updateNotice(
+              "更新を確認できませんでした。「最新版を開く」から再ログインして更新できます。",
+            );
+        });
+      window.addEventListener("online", () => {
+        registration
+          .update()
+          .catch(() =>
+            updateNotice(
+              "更新を確認できませんでした。「最新版を開く」から再ログインして更新できます。",
+            ),
+          );
+      });
       await navigator.serviceWorker.ready;
       offlineReady = true;
       connection();
     } catch {
-      notify(
-        "オフライン準備に失敗しました。オンラインで再読み込みしてください。",
-      );
+      offlineReady = !!navigator.serviceWorker.controller;
+      connection();
+      if (navigator.onLine)
+        updateNotice(
+          "更新を確認できませんでした。「最新版を開く」から再ログインして更新できます。",
+        );
     }
   } else if (import.meta.env.DEV) {
     document.querySelector("#connection").textContent =

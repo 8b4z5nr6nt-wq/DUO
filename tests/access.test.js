@@ -229,7 +229,10 @@ test("本人確認成功後だけセッションを発行し、GitHubトーク�
     start = await begin(s),
     response = await finish(s, start);
   assert.equal(response.status, 303);
-  assert.equal(response.headers.get("location"), config.APP_ORIGIN + "/");
+  const landing = new URL(response.headers.get("location"));
+  assert.equal(landing.origin, config.APP_ORIGIN);
+  assert.equal(landing.pathname, "/");
+  assert.match(landing.searchParams.get("duo-update"), /^[0-9a-f-]{36}$/);
   const session = cookie(response, sessionName);
   assert.ok(session);
   assert.match(response.headers.get("set-cookie"), /Max-Age=604800/);
@@ -499,4 +502,54 @@ test("ログアウトは同一サイトからのPOSTだけを許可する", asyn
   assert.ok(
     response.headers.getSetCookie().every((c) => c.includes("Max-Age=0")),
   );
+});
+
+test("更新用URLは本人セッションを検証し、旧キャッシュにないURLへ移動する", async () => {
+  const s = setup();
+  for (const c of [
+    "",
+    sessionName + "=forged",
+    await signedCookie("session", { exp: 1 }),
+    await signedCookie("session", { sub: "999" }),
+  ]) {
+    const response = await s.handler.fetch(
+      request("/auth/refresh?next=https://other.invalid", { Cookie: c }),
+      s.env,
+    );
+    assert.equal(response.status, 303);
+    assert.equal(
+      response.headers.get("Location"),
+      config.APP_ORIGIN + "/auth/login",
+    );
+    assert.equal(response.headers.get("Cache-Control"), "private, no-store");
+  }
+  const session = await signedCookie("session");
+  const destinations = [];
+  for (const method of ["GET", "HEAD"]) {
+    const response = await s.handler.fetch(
+      request(
+        "/auth/refresh?next=https://other.invalid",
+        { Cookie: session },
+        method,
+      ),
+      s.env,
+    );
+    assert.equal(response.status, 303);
+    const destination = new URL(response.headers.get("Location"));
+    assert.equal(destination.origin, config.APP_ORIGIN);
+    assert.equal(destination.pathname, "/");
+    assert.match(destination.searchParams.get("duo-update"), /^[0-9a-f-]{36}$/);
+    destinations.push(destination.href);
+  }
+  assert.notEqual(destinations[0], destinations[1]);
+  assert.equal(
+    (
+      await s.handler.fetch(
+        request("/auth/refresh", { Cookie: session }, "POST"),
+        s.env,
+      )
+    ).status,
+    405,
+  );
+  assert.equal(s.fetched, 0);
 });

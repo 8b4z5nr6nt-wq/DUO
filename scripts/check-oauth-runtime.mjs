@@ -216,7 +216,10 @@ try {
       assert.equal(scenario.assets, 0);
     } else {
       assert.equal(callback.status, 303);
-      assert.equal(callback.headers.get("Location"), origin + "/");
+      const landing = new URL(callback.headers.get("Location"));
+      assert.equal(landing.origin, origin);
+      assert.equal(landing.pathname, "/");
+      assert.match(landing.searchParams.get("duo-update"), /^[0-9a-f-]{36}$/);
       assert.ok(sessionCookie);
       assert.equal(sessionCookie.includes(accessToken), false);
       const asset = await mf.dispatchFetch(origin + "/assets/private.txt", {
