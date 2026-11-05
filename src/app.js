@@ -130,10 +130,10 @@ function link(route, label, primary = false) {
   return `<a class="button ${primary ? "primary" : ""}" href="#${route}">${label}</a>`;
 }
 function title(name, desc = "") {
-  return `<p class="eyebrow">YOUR ENGLISH, YOUR PACE</p><h1>${name}</h1><p class="muted">${desc}</p>`;
+  return `<h1>${name}</h1><p class="muted">${desc}</p>`;
 }
 function help() {
-  return `<details><summary>iPhone・iPadで使う／オフライン確認</summary><p>SafariでHTTPS配信されたDUOを開き、初回読み込み後「オフライン準備完了」を確認します。共有ボタン →「ホーム画面に追加」で登録してください（機種・OSでメニューが異なります）。</p><p>機内モードにしてアプリを開き直し、検索・学習・履歴保存を確認してください。初回はオンライン接続が必要です。Safariのサイトデータ削除・端末の容量整理でデータが失われる場合があります。定期的にJSONバックアップを保存してください。アカウントや同期機能はありません。</p></details>`;
+  return `<details><summary>iPhone・iPadで使う／オフライン確認</summary><p>SafariでHTTPS配信されたアプリを開き、初回読み込み後「オフライン準備完了」を確認します。共有ボタン →「ホーム画面に追加」で登録してください（機種・OSでメニューが異なります）。</p><p>機内モードにしてアプリを開き直し、検索・学習・履歴保存を確認してください。初回はオンライン接続が必要です。Safariのサイトデータ削除・端末の容量整理でデータが失われる場合があります。定期的にJSONバックアップを保存してください。アカウントや同期機能はありません。</p></details>`;
 }
 function home() {
   const today = state.sessions
@@ -1317,7 +1317,7 @@ function settings() {
   const s = state.settings;
   app.innerHTML =
     title("設定", "時間設定は次の学習から反映されます。") +
-    `<section class="card version-card" aria-labelledby="version-heading"><div><h2 id="version-heading">現在表示中のバージョン</h2><p class="muted">この画面で使用しているDUOのバージョンです。</p></div><strong class="version-number">v${esc(appVersion)}</strong><a class="button" href="${refreshURL()}" data-refresh-app>最新版を開く</a><p class="muted">オンラインで最新版を開きます。保存済みの学習データは保持されます。</p></section><form id="settings-form"><section class="card"><label>1日の学習目標（回答数）<input name="goal" type="number" min="1" max="1000" value="${s.goal}" required></label>${timingFields(s)}</section><section class="card"><h2>英語回答の表記ゆれ</h2>${[
+    `<section class="card version-card" aria-labelledby="version-heading"><div><h2 id="version-heading">現在表示中のバージョン</h2><p class="muted">現在表示しているバージョンです。</p></div><strong class="version-number">v${esc(appVersion)}</strong><a class="button" href="${refreshURL()}" data-refresh-app>最新版を開く</a><p class="muted">オンラインで最新版を開きます。保存済みの学習データは保持されます。</p></section><form id="settings-form"><section class="card"><label>1日の学習目標（回答数）<input name="goal" type="number" min="1" max="1000" value="${s.goal}" required></label>${timingFields(s)}</section><section class="card"><h2>英語回答の表記ゆれ</h2>${[
       ["ignoreCase", "大小文字を区別しない"],
       ["ignoreSpaces", "余分な空白をまとめる"],
       ["ignorePunctuation", "句読点を無視する"],

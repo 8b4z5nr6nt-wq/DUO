@@ -85,7 +85,9 @@ const server = createServer(async (req, res) => {
     return reply(
       200,
       (release === "legacy"
-        ? html.replaceAll('href="/auth/refresh"', 'href="#settings"')
+        ? html
+            .replaceAll('href="/auth/refresh"', 'href="#settings"')
+            .replace(/<title>.*?<\/title>/, "<title>DUO — 英語学習</title>")
         : html
       ).replace("<html ", `<html data-test-release="${release}" `),
     );
