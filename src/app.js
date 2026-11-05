@@ -1233,13 +1233,20 @@ function data() {
       };
       showPreview();
     } catch (e) {
-      clearImportPreview();
-      notify(
-        "取り込み形式エラー: " +
-          (e instanceof SyntaxError
-            ? "JSONの括弧・カンマ・引用符を確認してください。"
-            : e.message),
-      );
+      const message =
+        e instanceof SyntaxError
+          ? "JSONの括弧・カンマ・引用符を確認してください。"
+          : e.message;
+      importPreview = {
+        kind: "items",
+        value: [],
+        mode: $("#import-mode").value,
+        added: 0,
+        updated: 0,
+        errors: [message],
+      };
+      showPreview();
+      notify("取り込み形式エラー: " + message);
     }
   };
   $("#preview-backup").onclick = () => {

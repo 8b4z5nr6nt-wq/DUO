@@ -10,19 +10,20 @@ test("教材JSONをファイルで登録・更新し関連語を検索、履歴�
     ),
   );
   const upload = async () => {
-    await page
-      .locator("#import-file")
-      .setInputFiles({
-        name: "fictional.json",
-        mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify(raw)),
-      });
+    await page.locator("#import-file").setInputFiles({
+      name: "fictional.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(raw)),
+    });
     await page
       .getByRole("button", { name: "取り込み前に確認", exact: true })
       .click();
     await page
       .getByRole("button", { name: "この内容を登録", exact: true })
       .click();
+    await expect(
+      page.getByRole("button", { name: "この内容を登録", exact: true }),
+    ).toHaveCount(0);
   };
   await upload();
   await expect(page.getByText("2 件登録済み")).toBeVisible();
