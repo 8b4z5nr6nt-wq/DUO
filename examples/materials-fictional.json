@@ -1,0 +1,29 @@
+{
+  "format": "duo-materials",
+  "version": 1,
+  "sections": [
+    {
+      "number": 1,
+      "sentences": [
+        {
+          "number": 1,
+          "en": "My robot painted a tiny moon.",
+          "ja": "私のロボットは小さな月を描きました。",
+          "words": [
+            {
+              "number": 1,
+              "en": "paint",
+              "ja": "描く",
+              "related": [
+                {
+                  "en": "moon painter",
+                  "ja": "月の絵描き"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

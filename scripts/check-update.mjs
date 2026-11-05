@@ -253,7 +253,7 @@ try {
     .getByRole("link", { name: "最新版を開く" })
     .click();
   await page.getByRole("heading", { name: "今日の一歩を。" }).waitFor();
-  assert.equal(counts.refresh, 2);
+  assert.equal(counts.refresh, 1); // Static hosting updates without an auth endpoint.
   assert.equal(await marker(), "updated");
   assert.deepEqual(await stored(), before);
 

@@ -222,6 +222,38 @@ export function validateItems(raw, existing = [], allowUpdate = false) {
         favorite: r.favorite === true,
         review: r.review === true,
       };
+      if (r.sentenceNumber !== undefined) {
+        if (
+          r.kind !== "word" ||
+          !Number.isSafeInteger(r.sentenceNumber) ||
+          r.sentenceNumber < 1
+        )
+          throw Error("対応する例文番号が不正です");
+        item.sentenceNumber = r.sentenceNumber;
+      }
+      if (r.relatedWords !== undefined) {
+        if (
+          r.kind !== "word" ||
+          !Array.isArray(r.relatedWords) ||
+          r.relatedWords.length > 10000
+        )
+          throw Error("関連語の形式が不正です");
+        const seenRelated = new Set();
+        item.relatedWords = r.relatedWords.map((v) => {
+          if (
+            !v ||
+            typeof v.en !== "string" ||
+            !v.en.trim() ||
+            typeof v.ja !== "string" ||
+            !v.ja.trim()
+          )
+            throw Error("関連語には英語と日本語が必要です");
+          if (seenRelated.has(v.en.trim()))
+            throw Error("関連語が重複しています");
+          seenRelated.add(v.en.trim());
+          return { en: v.en.trim(), ja: v.ja.trim() };
+        });
+      }
       for (const f of ["aliasesEn", "aliasesJa", "related"]) {
         const v = r[f] ?? [];
         if (Array.isArray(v) && v.every((x) => typeof x === "string"))

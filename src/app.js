@@ -1,3 +1,4 @@
+import { prepareImport, applyImport } from "./materials.js";
 import "./style.css";
 import { installSwipeNavigation } from "./swipe.js";
 import { emptyDrawing, hasInk, mountHandwriting } from "./handwriting.js";
@@ -765,9 +766,13 @@ function search(requestedSection, picking = false) {
       (i) =>
         !q ||
         String(i.number).includes(numberQuery) ||
-        [i.en, i.ja, ...i.aliasesEn, ...i.aliasesJa].some((v) =>
-          String(v).toLowerCase().includes(q),
-        ),
+        [
+          i.en,
+          i.ja,
+          ...i.aliasesEn,
+          ...i.aliasesJa,
+          ...(i.relatedWords || []).flatMap((r) => [r.en, r.ja]),
+        ].some((v) => String(v).toLowerCase().includes(q)),
     );
     sections = [
       ...new Set((q ? matches : state.items).map((i) => i.section)),
@@ -961,6 +966,11 @@ function detail(kind, number) {
       ["その他の意味", item.otherMeanings],
       ["説明", item.notes],
       ["類義語", item.synonyms],
+      ["対応する例文", item.sentenceNumber || ""],
+      [
+        "関連語（出題対象外）",
+        (item.relatedWords || []).map((r) => `${r.en}：${r.ja}`).join("\n"),
+      ],
       ["関連表現", item.related.join("\n")],
     ]
       .filter(([, v]) => v)
@@ -1151,7 +1161,7 @@ function data() {
       "データ管理",
       "問題と記録はこの端末に保存されます。教材データは含まれていません。",
     ) +
-    `<section class="card"><h2>登録・編集</h2><p>${state.items.length} 件登録済み</p><div class="row">${link("edit", "1件ずつ登録", true)}${link("search", "検索して編集")}<button id="demo">開発用の架空データを追加</button></div><p class="muted">架空データは4件です。DUO教材の例文・訳・単語ではありません。既存番号と重複するデータは追加しません。</p></section><section class="card"><h2>JSON / CSV一括登録</h2><label>ファイル<input id="import-file" type="file" accept=".json,.csv,application/json,text/csv"></label><label>または貼り付け<textarea id="import-text" placeholder='[{"kind":"word","number":1,"section":1,"en":"...","ja":"..."}]'></textarea></label><label>形式<select id="import-format"><option value="json">JSON</option><option value="csv">CSV</option></select></label><button id="preview-import">取り込み前に確認</button></section><section class="card"><h2>全データバックアップ・復元</h2><button id="export">JSONバックアップを保存</button><p class="muted">問題・方向別復習記録・回答履歴・設定を含みます。</p><label>バックアップを選択<input id="backup-file" type="file" accept=".json,application/json"></label><label>復元方法<select id="restore-mode"><option value="merge">追加統合（既存問題・設定を優先）</option><option value="replace">既存データを消して完全復元</option></select></label><label>またはバックアップJSONを貼り付け<textarea id="backup-text"></textarea></label><button id="preview-backup">復元前に確認</button><p class="muted">復元を確定すると途中の学習は終了します。統合では同じ履歴IDを重複させず、復習記録は更新日時が新しいものを採用します。同じ番号の問題は既存内容を保持します。</p></section><div id="preview"></div>${help()}`;
+    `<section class="card"><h2>登録・編集</h2><p>${state.items.length} 件登録済み</p><div class="row">${link("edit", "1件ずつ登録", true)}${link("search", "検索して編集")}<button id="demo">開発用の架空データを追加</button></div><p class="muted">架空データは4件です。DUO教材の例文・訳・単語ではありません。既存番号と重複するデータは追加しません。</p></section><section class="card"><h2>教材JSONの手動インポート</h2><p>青文字の見出しと主要な訳をそのまま登録します。例文の活用形には変換しません。関連語は出題数に含めません。CSV・個別編集は旧データの互換用です。</p><label>登録方法<select id="import-mode"><option value="add">追加（同じ番号があれば中止）</option><option value="update">追加・更新（同じ番号の教材だけ更新）</option></select></label><label>ファイル<input id="import-file" type="file" accept=".json,.csv,application/json,text/csv"></label><label>または貼り付け<textarea id="import-text" placeholder='[{"kind":"word","number":1,"section":1,"en":"...","ja":"..."}]'></textarea></label><label>形式<select id="import-format"><option value="json">JSON</option><option value="csv">CSV</option></select></label><button id="preview-import">取り込み前に確認</button></section><section class="card"><h2>全データバックアップ・復元</h2><button id="export">JSONバックアップを保存</button><p class="muted">問題・方向別復習記録・回答履歴・設定を含みます。</p><label>バックアップを選択<input id="backup-file" type="file" accept=".json,application/json"></label><label>復元方法<select id="restore-mode"><option value="merge">追加統合（既存問題・設定を優先）</option><option value="replace">既存データを消して完全復元</option></select></label><label>またはバックアップJSONを貼り付け<textarea id="backup-text"></textarea></label><button id="preview-backup">復元前に確認</button><p class="muted">復元を確定すると途中の学習は終了します。統合では同じ履歴IDを重複させず、復習記録は更新日時が新しいものを採用します。同じ番号の問題は既存内容を保持します。</p></section><div id="preview"></div>${help()}`;
   $("#demo").onclick = async () => {
     if (
       await commit((s) => {
@@ -1173,7 +1183,15 @@ function data() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   };
+  const clearImportPreview = () => {
+    importPreview = null;
+    $("#preview").innerHTML = "";
+  };
+  for (const selector of ["#import-text", "#import-format", "#import-mode"])
+    $(selector).addEventListener("input", clearImportPreview);
   $("#import-file").onchange = async (e) => {
+    clearImportPreview();
+    $("#import-text").value = "";
     const f = e.target.files[0];
     if (!f) return;
     try {
@@ -1203,18 +1221,25 @@ function data() {
       const text = $("#import-text").value;
       const raw =
         $("#import-format").value === "csv" ? parseCSV(text) : JSON.parse(text);
-      const parsed = validateItems(
-        Array.isArray(raw) ? raw : raw.items,
-        state.items,
-      );
+      const mode = $("#import-mode").value;
+      const parsed = prepareImport(raw, state.items, mode);
       importPreview = {
         kind: "items",
         value: parsed.items,
-        errors: parsed.errors,
+        mode,
+        added: parsed.added,
+        updated: parsed.updated,
+        errors: [],
       };
       showPreview();
     } catch (e) {
-      notify("取り込み形式エラー: " + e.message);
+      clearImportPreview();
+      notify(
+        "取り込み形式エラー: " +
+          (e instanceof SyntaxError
+            ? "JSONの括弧・カンマ・引用符を確認してください。"
+            : e.message),
+      );
     }
   };
   $("#preview-backup").onclick = () => {
@@ -1236,7 +1261,7 @@ function showPreview() {
   const p = importPreview,
     items = p.kind === "items" ? p.value : p.value.items;
   $("#preview").innerHTML =
-    `<section class="card"><h2>${p.kind === "items" ? "登録プレビュー" : p.mode === "replace" ? "完全復元：既存データを削除します" : "追加統合プレビュー"}</h2><p>${items.length} 問${p.kind === "backup" ? ` / ${p.value.sessions.length} 学習履歴 / ${Object.keys(p.value.records).length} 復習記録` : ""}</p>${p.errors.length ? `<pre class="wrong">${p.errors.map(esc).join("\n")}</pre><p>エラーを修正してください。一部だけの登録は行いません。</p>` : ""}<div class="scroll"><table><thead><tr><th>種類・番号</th><th>セクション</th><th>英語</th><th>日本語</th></tr></thead><tbody>${items.map((i) => `<tr><td>${type(i)} ${i.number}</td><td>${i.section}</td><td>${esc(i.en)}</td><td>${esc(i.ja)}</td></tr>`).join("")}</tbody></table></div>${p.kind === "backup" ? `<p>設定: 1日 ${p.value.settings.goal}問 / 復習間隔 ${p.value.settings.intervals.join(", ")}日</p>` : ""}${p.kind === "backup" && p.mode === "replace" ? '<label><input id="confirm-replace" type="checkbox">既存データを消すことを確認しました</label>' : ""}<button id="apply-import" class="primary" ${p.errors.length || (!items.length && p.kind === "items") ? "disabled" : ""}>${p.kind === "items" ? "この内容を登録" : "この内容で復元"}</button><button id="cancel-import">キャンセル</button></section>`;
+    `<section class="card"><h2>${p.kind === "items" ? "登録プレビュー" : p.mode === "replace" ? "完全復元：既存データを削除します" : "追加統合プレビュー"}</h2><p>${p.kind === "items" ? `追加 ${p.added}件・更新 ${p.updated}件 / ` : ""}${items.length} 問${p.kind === "backup" ? ` / ${p.value.sessions.length} 学習履歴 / ${Object.keys(p.value.records).length} 復習記録` : ""}</p>${p.errors.length ? `<pre class="wrong">${p.errors.map(esc).join("\n")}</pre><p>エラーを修正してください。一部だけの登録は行いません。</p>` : ""}<div class="scroll"><table><thead><tr><th>種類・番号</th><th>セクション</th><th>英語</th><th>日本語</th></tr></thead><tbody>${items.map((i) => `<tr><td>${type(i)} ${i.number}</td><td>${i.section}</td><td>${esc(i.en)}${i.sentenceNumber ? `<small> / 例文 ${i.sentenceNumber}</small>` : ""}</td><td>${esc(i.ja)}${(i.relatedWords || []).map((r) => `<p>関連語: ${esc(r.en)}：${esc(r.ja)}</p>`).join("")}</td></tr>`).join("")}</tbody></table></div>${p.kind === "backup" ? `<p>設定: 1日 ${p.value.settings.goal}問 / 復習間隔 ${p.value.settings.intervals.join(", ")}日</p>` : ""}${p.kind === "backup" && p.mode === "replace" ? '<label><input id="confirm-replace" type="checkbox">既存データを消すことを確認しました</label>' : ""}<button id="apply-import" class="primary" ${p.errors.length || (!items.length && p.kind === "items") ? "disabled" : ""}>${p.kind === "items" ? "この内容を登録" : "この内容で復元"}</button><button id="cancel-import">キャンセル</button></section>`;
   $("#preview").scrollIntoView({ behavior: "smooth" });
   $("#cancel-import").onclick = () => {
     importPreview = null;
@@ -1251,12 +1276,14 @@ function showPreview() {
       notify("完全復元の確認チェックを入れてください。");
       return;
     }
+    if (study && p.kind === "items") {
+      notify("学習を終了してから教材を登録してください。");
+      return;
+    }
     if (
       await commit((s) => {
         if (p.kind === "items") {
-          const recheck = validateItems(p.value, s.items);
-          if (recheck.errors.length) throw Error(recheck.errors.join("\n"));
-          s.items.push(...recheck.items);
+          applyImport(s, p.value, p.mode);
         } else {
           const result =
             p.mode === "replace" ? p.value : mergeBackup(s, p.value);
@@ -1283,7 +1310,7 @@ function settings() {
   const s = state.settings;
   app.innerHTML =
     title("設定", "時間設定は次の学習から反映されます。") +
-    `<section class="card version-card" aria-labelledby="version-heading"><div><h2 id="version-heading">現在表示中のバージョン</h2><p class="muted">この画面で使用しているDUOのバージョンです。</p></div><strong class="version-number">v${esc(appVersion)}</strong><a class="button" href="/auth/refresh" data-refresh-app>最新版を開く</a><p class="muted">更新には通信と、必要に応じてGitHubでの再ログインを使います。保存済みの学習データは保持されます。</p></section><form id="settings-form"><section class="card"><label>1日の学習目標（回答数）<input name="goal" type="number" min="1" max="1000" value="${s.goal}" required></label>${timingFields(s)}</section><section class="card"><h2>英語回答の表記ゆれ</h2>${[
+    `<section class="card version-card" aria-labelledby="version-heading"><div><h2 id="version-heading">現在表示中のバージョン</h2><p class="muted">この画面で使用しているDUOのバージョンです。</p></div><strong class="version-number">v${esc(appVersion)}</strong><a class="button" href="${refreshURL()}" data-refresh-app>最新版を開く</a><p class="muted">オンラインで最新版を開きます。保存済みの学習データは保持されます。</p></section><form id="settings-form"><section class="card"><label>1日の学習目標（回答数）<input name="goal" type="number" min="1" max="1000" value="${s.goal}" required></label>${timingFields(s)}</section><section class="card"><h2>英語回答の表記ゆれ</h2>${[
       ["ignoreCase", "大小文字を区別しない"],
       ["ignoreSpaces", "余分な空白をまとめる"],
       ["ignorePunctuation", "句読点を無視する"],
@@ -1415,6 +1442,11 @@ document.addEventListener("click", (event) => {
   const anchor = event.target.closest('a[href^="#"]');
   if (anchor && anchor.hash !== "#learn") pauseForLeaving();
 });
+function refreshURL() {
+  return location.hostname.endsWith(".workers.dev")
+    ? "/auth/refresh"
+    : `${location.pathname}?duo-update=${Date.now()}`;
+}
 function updateNotice(message) {
   const notice = document.querySelector("#app-update");
   notice.querySelector("p").textContent = message;
@@ -1442,6 +1474,7 @@ async function init() {
     notify(storageMessage(e));
   }
   render();
+  document.querySelector("#app-update [data-refresh-app]").href = refreshURL();
   connection();
   if ("serviceWorker" in navigator && import.meta.env.PROD) {
     try {
@@ -1461,7 +1494,7 @@ async function init() {
         registration.update().catch(() => {
           if (navigator.onLine)
             updateNotice(
-              "更新を確認できませんでした。「最新版を開く」から再ログインして更新できます。",
+              "更新を確認できませんでした。通信を確認し、「最新版を開く」を押してください。",
             );
         });
       window.addEventListener("online", () => {
@@ -1469,7 +1502,7 @@ async function init() {
           .update()
           .catch(() =>
             updateNotice(
-              "更新を確認できませんでした。「最新版を開く」から再ログインして更新できます。",
+              "更新を確認できませんでした。通信を確認し、「最新版を開く」を押してください。",
             ),
           );
       });
@@ -1481,7 +1514,7 @@ async function init() {
       connection();
       if (navigator.onLine)
         updateNotice(
-          "更新を確認できませんでした。「最新版を開く」から再ログインして更新できます。",
+          "更新を確認できませんでした。通信を確認し、「最新版を開く」を押してください。",
         );
     }
   } else if (import.meta.env.DEV) {
