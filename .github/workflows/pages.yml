@@ -1,5 +1,7 @@
-name: Deploy Pages after approval
+name: Deploy GitHub Pages
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       approved:
@@ -14,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    if: inputs.approved && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.approved)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

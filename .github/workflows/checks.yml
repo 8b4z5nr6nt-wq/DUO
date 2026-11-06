@@ -2,8 +2,9 @@ name: Validate DUO
 on:
   workflow_dispatch:
   pull_request:
-  push:
-    branches: [feature/github-materials-v030]
+concurrency:
+  group: validate-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

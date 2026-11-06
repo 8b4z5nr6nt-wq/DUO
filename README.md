@@ -1,8 +1,10 @@
-# v0.3.0 教材JSON・GitHub運用統合（レビュー待ち）
+# v0.3.0 教材JSON・GitHub運用統合（公開済み）
 
 [入力仕様と移行方法](docs/materials.md) / [調査結果・公開切り替え手順](docs/github-migration.md) / [架空JSONサンプル](examples/materials-fictional.json) / [JSON Schema](schemas/materials.schema.json)
 
-教材の手動JSON追加・更新と関連語に対応します。履歴・設定は維持します。Codespaces、検証Actions、承認後に実行するPages配信を準備しています。現在のCloudflare公開環境とリポジトリ公開設定は変更していません。
+教材の手動JSON追加・更新と関連語に対応します。履歴・設定は維持します。Codespaces、PR検証Actions、main更新時のPages自動配信を設定済みです。アプリは https://8b4z5nr6nt-wq.github.io/DUO/ で公開しています。教材はPrivateのDUO-Dataで管理し、アプリへ手動インポートします。既存Cloudflareサイトも引き続き利用できます。
+
+[教材ファイルの置き場所](https://github.com/8b4z5nr6nt-wq/DUO-Data/tree/main/data/sections) / [旧サイトからのデータ移行](docs/github-migration.md#端末のデータ移行)
 
 # v0.2.4 ログイン済み端末の更新を修正
 
