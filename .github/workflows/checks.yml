@@ -21,7 +21,15 @@ jobs:
       - run: npm run build
       - run: npm run cloudflare:check
       - run: npm run test:oauth-runtime
-      - run: npx playwright install --with-deps chromium
+      - name: Prepare browser
+        shell: bash
+        run: |
+          duo_browser_path="$(command -v google-chrome || command -v chromium || true)"
+          if [ -n "$duo_browser_path" ]; then
+            echo "CHROMIUM_PATH=$duo_browser_path" >> "$GITHUB_ENV"
+          else
+            npx playwright install --with-deps chromium
+          fi
       - run: npm run test:update
       - run: npm run test:pages
       - run: npm run test:private
