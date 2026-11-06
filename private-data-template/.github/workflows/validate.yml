@@ -1,0 +1,25 @@
+name: Validate private materials
+on: [push, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: materials
+      # Enable after DUO is public and the reviewed implementation is merged.
+      - uses: actions/checkout@v4
+        with:
+          repository: 8b4z5nr6nt-wq/DUO
+          ref: main
+          path: validator
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: validator/package-lock.json
+      - run: npm ci
+        working-directory: validator
+      - run: node validator/scripts/validate-materials.mjs materials/data/sections/*.json

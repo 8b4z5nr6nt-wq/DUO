@@ -29,7 +29,7 @@ self.addEventListener("install", (event) =>
         throw Error("shell fetch failed");
       const html = await response.clone().text();
       if (
-        !/<title>\s*DUO — 英語学習\s*<\/title>/.test(html) ||
+        !/<meta\s+name="app-shell"\s+content="personal-study-v1"/.test(html) ||
         !/<main\s+id="app"/.test(html)
       )
         throw Error("not a DUO shell");

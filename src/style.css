@@ -1361,3 +1361,36 @@ button {
     margin-inline: 14px;
   }
 }
+
+/* Keep the current glass design; respect a dark OS appearance. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --ink: #edf7ff;
+    --muted: #c8d8e4;
+    --surface: #14232be6;
+    --line: #769aaa55;
+    --blue: #85e1e9;
+  }
+  body {
+    background:
+      radial-gradient(ellipse at top left, #123933, transparent 65%), #080e14;
+  }
+  .card,
+  .learning-card,
+  .version-card {
+    background: #14232be6;
+    color: #edf7ff;
+  }
+  input,
+  textarea,
+  select {
+    background: #101c25;
+    color: #edf7ff;
+  }
+  .card h2,
+  .card h3,
+  .card .muted {
+    color: #d3e6f2;
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "DUO",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-24-bookworm",
+  "postCreateCommand": "npm ci",
+  "forwardPorts": [5173],
+  "portsAttributes": {"5173": {"label": "DUO preview", "onAutoForward": "notify", "visibility": "private"}}
+}

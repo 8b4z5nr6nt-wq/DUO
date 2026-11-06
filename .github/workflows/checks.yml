@@ -1,6 +1,9 @@
 name: Validate DUO
 on:
   workflow_dispatch:
+  pull_request:
+  push:
+    branches: [feature/github-materials-v030]
 permissions:
   contents: read
 jobs:
@@ -21,3 +24,5 @@ jobs:
       - run: npm run test:update
       - run: npm run test:pages
       - run: npm run test:private
+      - run: npm run validate:materials -- examples/materials-fictional.json
+      - run: npm run test:e2e
