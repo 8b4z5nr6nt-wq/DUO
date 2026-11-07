@@ -29,6 +29,10 @@ export default defineConfig({
           "icon-192.png",
           "icon-512.png",
           "apple-touch-icon.png",
+          "icons/home-5aac22ca3605-180.png",
+          "icons/home-15db8e0bf2e0-192.png",
+          "icons/home-b67e930d8165-512.png",
+
         ]) {
           hash.update(asset);
           hash.update(readFileSync(`${options.dir}/${asset}`));
