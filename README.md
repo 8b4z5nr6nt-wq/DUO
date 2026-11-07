@@ -1,3 +1,9 @@
+# v0.3.1 ホーム画面アイコン
+
+指定された画像をそのままアイコンに使用し、192px・512pxのPWAアイコンと180pxのApple touch iconを用意しました。アプリ名の空白表示は維持します。画像URLにバージョンを付け、画像変更をオフラインキャッシュのバージョンにも反映します。
+
+iPhone・iPadではSafariからアプリを開き、共有→「ホーム画面に追加」を使用します。既存アイコンが自動更新されない場合は、JSONバックアップを保存してから追加し直してください。サイトデータを削除する必要はありません。実機でのアイコン反映は未確認です。
+
 # v0.3.0 教材JSON・GitHub運用統合（公開済み）
 
 [入力仕様と移行方法](docs/materials.md) / [調査結果・公開切り替え手順](docs/github-migration.md) / [架空JSONサンプル](examples/materials-fictional.json) / [JSON Schema](schemas/materials.schema.json)
