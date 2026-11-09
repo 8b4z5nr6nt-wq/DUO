@@ -1,3 +1,10 @@
+import {
+  quizSchedule,
+  examSchedule,
+  schedulePresets,
+  applyScheduleRange,
+  schedulePresetId,
+} from "./schedule.js";
 import { prepareImport, applyImport } from "./materials.js";
 import "./style.css";
 import { installSwipeNavigation } from "./swipe.js";
@@ -149,7 +156,17 @@ function home() {
 function setup() {
   app.innerHTML =
     title("学習設定", "未登録の番号は対象外になります。") +
-    `${study ? '<p><a class="button" href="#learn">途中の学習に戻る</a></p>' : ""}<form id="setup-form"><div class="grid"><label>種類<select name="kind"><option value="sentence">例文</option><option value="word">単語</option><option value="all">例文と単語</option></select></label><label>出題方向<select name="direction"><option value="en-ja">英語 → 日本語</option><option value="ja-en">日本語 → 英語</option></select></label></div><label>回答方法<select name="answerMode"><option value="text">キーボード</option><option value="scribble">手書き（Apple Pencil）・スクリブル自動採点</option><option value="choice">4択問題</option><option value="card">カード形式</option><option value="handwriting">筆跡を保存（Apple Pencil・指／自己採点）</option></select></label><p class="muted">iPadOSのスクリブルを有効にし、回答欄にApple Pencilで書くと、変換された文字を自動採点します。4択には同じ種類の異なる答えが4件以上必要です。</p><div class="range-controls"><div class="row between"><button type="button" id="choose-range">範囲を選択</button><button type="button" id="clear-range">全範囲に戻す</button></div><p id="range-summary" class="muted" aria-live="polite"></p></div><details><summary>番号を入力して範囲指定</summary><fieldset><legend>番号で範囲指定（空欄は全範囲）</legend><label>セクション<input name="sections" placeholder="例: 1-5,8"></label><div class="grid"><label>例文番号<input name="sentences" placeholder="例: 1-20"></label><label>単語番号<input name="words" placeholder="例: 1-50"></label></div></fieldset></details><div class="grid"><label>絞り込み<select name="filter"><option value="all">登録済みすべて</option><option value="weak">苦手（微妙・覚えてない）</option><option value="due">復習期限が来た問題</option><option value="favorite">お気に入り</option><option value="review">要復習マーク</option></select></label><label>順序<select name="order"><option value="number">番号順</option><option value="random">ランダム</option></select></label><label>問題数（空欄は全問）<input type="number" name="count" min="1" max="10000" placeholder="全問"></label></div><details><summary>タイマー・ヒント</summary><fieldset><legend>時間設定</legend>${timingFields(state.settings)}</fieldset></details><p id="target-count" aria-live="polite"></p><button class="primary" type="submit">学習を開始</button><button type="button" id="reset-study">学習設定を初期化</button></form>`;
+    `${study ? '<p><a class="button" href="#learn">途中の学習に戻る</a></p>' : ""}<form id="setup-form"><div class="grid"><label>種類<select name="kind"><option value="sentence">例文</option><option value="word">単語</option><option value="all">例文と単語</option></select></label><label>出題方向<select name="direction"><option value="en-ja">英語 → 日本語</option><option value="ja-en">日本語 → 英語</option></select></label></div><label>回答方法<select name="answerMode"><option value="text">キーボード</option><option value="scribble">手書き（Apple Pencil）・スクリブル自動採点</option><option value="choice">4択問題</option><option value="card">カード形式</option><option value="handwriting">筆跡を保存（Apple Pencil・指／自己採点）</option></select></label><p class="muted">iPadOSのスクリブルを有効にし、回答欄にApple Pencilで書くと、変換された文字を自動採点します。4択には同じ種類の異なる答えが4件以上必要です。</p><label>予定表から範囲指定<select name="scheduleRange" id="schedule-range"><option value="" disabled>小テスト・考査を選択</option>${[
+      ["小テスト", quizSchedule],
+      ["定期考査・実力テスト", examSchedule],
+    ]
+      .map(
+        ([label, rows]) =>
+          `<optgroup label="${label}">${rows.map((p) => `<option value="${p.id}">${p.label} · 例文${p.start}〜${p.end}</option>`).join("")}</optgroup>`,
+      )
+      .join(
+        "",
+      )}</select></label><div class="range-controls"><div class="row between"><button type="button" id="choose-range">範囲を選択</button><button type="button" id="clear-range">全範囲に戻す</button></div><p id="range-summary" class="muted" aria-live="polite"></p></div><details><summary>番号を入力して範囲指定</summary><fieldset><legend>番号で範囲指定（空欄は全範囲）</legend><label>セクション<input name="sections" placeholder="例: 1-5,8"></label><div class="grid"><label>例文番号<input name="sentences" placeholder="例: 1-20"></label><label>単語番号<input name="words" placeholder="例: 1-50"></label></div></fieldset></details><div class="grid"><label>絞り込み<select name="filter"><option value="all">登録済みすべて</option><option value="weak">苦手（微妙・覚えてない）</option><option value="due">復習期限が来た問題</option><option value="favorite">お気に入り</option><option value="review">要復習マーク</option></select></label><label>順序<select name="order"><option value="number">番号順</option><option value="random">ランダム</option></select></label><label>問題数（空欄は全問）<input type="number" name="count" min="1" max="10000" placeholder="全問"></label></div><details><summary>タイマー・ヒント</summary><fieldset><legend>時間設定</legend>${timingFields(state.settings)}</fieldset></details><p id="target-count" aria-live="polite"></p><button class="primary" type="submit">学習を開始</button><button type="button" id="reset-study">学習設定を初期化</button></form>`;
   $("#reset-study").onclick = async () => {
     if (
       await commit((s) => {
@@ -192,11 +209,25 @@ function setup() {
       const n = read().length;
       const ids = options.selectedIds && new Set(options.selectedIds);
       const chosen = ids && state.items.filter((i) => ids.has(identity(i)));
-      $("#range-summary").textContent = chosen
-        ? `一覧から ${chosen.length} 問選択（例文 ${chosen.filter((i) => i.kind === "sentence").length} / 単語 ${chosen.filter((i) => i.kind === "word").length}）。種類・絞り込みは下の対象数に反映されます。`
-        : [options.sections, options.sentences, options.words].some(Boolean)
-          ? "番号で指定した範囲を使用中です。"
-          : "全範囲から出題します。一覧で問題を選べます。";
+      const preset = schedulePresets.find(
+        (p) => p.id === schedulePresetId(options),
+      );
+      form.elements.scheduleRange.value = preset?.id || "";
+      const registered =
+        preset &&
+        state.items.filter(
+          (i) =>
+            i.kind === "sentence" &&
+            i.number >= preset.start &&
+            i.number <= preset.end,
+        ).length;
+      $("#range-summary").textContent = preset
+        ? `${preset.label}：例文${preset.start}〜${preset.end}（予定${preset.end - preset.start + 1}問・登録済み${registered}問）。未登録の例文は出題しません。`
+        : chosen
+          ? `一覧から ${chosen.length} 問選択（例文 ${chosen.filter((i) => i.kind === "sentence").length} / 単語 ${chosen.filter((i) => i.kind === "word").length}）。種類・絞り込みは下の対象数に反映されます。`
+          : [options.sections, options.sentences, options.words].some(Boolean)
+            ? "番号で指定した範囲を使用中です。"
+            : "全範囲から出題します。一覧で問題を選べます。";
       $("#target-count").textContent =
         `対象 ${n} 問 / 出題 ${Math.min(n, Number(options.count) || n)} 問`;
       form.querySelector('[type="submit"]').disabled = n === 0;
@@ -218,6 +249,11 @@ function setup() {
     });
   };
   form.addEventListener("input", (event) => {
+    if (event.target.name === "scheduleRange") {
+      options = applyScheduleRange(options, event.target.value);
+      for (const field of ["kind", "sections", "sentences", "words"])
+        form.elements[field].value = options[field];
+    }
     if (["sections", "sentences", "words"].includes(event.target.name))
       options.selectedIds = null;
     update();
