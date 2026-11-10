@@ -47,15 +47,6 @@
   </head>
   <body>
     <header>
-      <div class="brand-group">
-        <a
-          href="#settings"
-          class="version-badge"
-          aria-label="現在のバージョン %APP_VERSION%・設定で確認"
-          >v%APP_VERSION%</a
-        >
-      </div>
-      <span id="connection"></span>
       <button
         type="button"
         id="menu-toggle"
@@ -65,6 +56,15 @@
       >
         <span aria-hidden="true">☰</span>
       </button>
+      <div class="brand-group">
+        <a
+          href="#settings"
+          class="version-badge"
+          aria-label="現在のバージョン %APP_VERSION%・設定で確認"
+          >v%APP_VERSION%</a
+        >
+      </div>
+      <span id="connection"></span>
     </header>
     <div id="notice" role="alert" hidden></div>
     <aside id="app-update" class="update-banner" role="status" hidden>

@@ -1405,31 +1405,90 @@ button {
 }
 header {
   gap: 10px;
+  justify-content: flex-start;
 }
 header #connection {
   min-width: 0;
+  margin-left: auto;
   text-align: center;
   font-size: 11px;
 }
 #app-menu {
   position: fixed;
-  inset: 12px 12px auto auto;
-  width: min(320px, calc(100vw - 24px));
-  max-height: calc(100dvh - 24px);
+  inset: 0 auto 0 0;
+  width: 60vw;
+  max-width: none;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
   margin: 0;
-  padding: 16px;
-  border: 1px solid #ffffffaa;
-  border-radius: 22px;
+  padding: calc(16px + env(safe-area-inset-top)) 14px
+    calc(16px + env(safe-area-inset-bottom))
+    calc(14px + env(safe-area-inset-left));
+  border: 0;
+  border-right: 1px solid #ffffffaa;
+  border-radius: 0 20px 20px 0;
   background: #e6f5f6f5;
   color: #153b46;
-  box-shadow: 0 20px 60px #001c4044;
+  box-shadow: 12px 0 32px #001c4026;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  animation: menu-slide-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+#app-menu.closing {
+  animation: menu-slide-out 180ms ease-in forwards;
+}
+body.menu-open {
+  overflow: hidden;
 }
 #app-menu:not([open]) {
   display: none;
 }
 #app-menu::backdrop {
-  background: #00192877;
-  backdrop-filter: blur(5px);
+  background: rgb(0 15 25 / 28%);
+  animation: menu-dim-in 240ms ease-out;
+}
+#app-menu.closing::backdrop {
+  animation: menu-dim-out 180ms ease-in forwards;
+}
+@keyframes menu-slide-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes menu-slide-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes menu-dim-in {
+  from {
+    background: rgb(0 15 25 / 0%);
+  }
+  to {
+    background: rgb(0 15 25 / 28%);
+  }
+}
+@keyframes menu-dim-out {
+  from {
+    background: rgb(0 15 25 / 28%);
+  }
+  to {
+    background: rgb(0 15 25 / 0%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #app-menu,
+  #app-menu::backdrop {
+    animation: none;
+  }
 }
 #app-menu nav {
   position: static;
@@ -1553,40 +1612,37 @@ button {
   text-align: center;
   font-size: 14px;
 }
-body.browse-view main {
-  padding-right: 72px;
-}
 .browse-meter {
-  position: fixed;
-  right: max(8px, env(safe-area-inset-right));
-  top: 25vh;
-  width: 54px;
-  height: min(56vh, 480px);
-  display: flex;
-  flex-direction: column;
+  position: sticky;
+  top: max(8px, env(safe-area-inset-top));
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 4px;
+  gap: 2px 10px;
+  margin-bottom: 16px;
   z-index: 5;
   color: white;
   background: #073e5caa;
   border: 1px solid #ffffff66;
   border-radius: 16px;
-  padding: 8px 2px;
+  padding: 8px 12px;
   backdrop-filter: blur(15px);
 }
 .browse-meter input {
-  writing-mode: vertical-lr;
+  writing-mode: horizontal-tb;
   direction: ltr;
-  width: 36px;
-  height: 100%;
-  min-height: 60px;
+  width: 100%;
+  height: 24px;
+  min-height: 24px;
   padding: 0;
   margin: 0;
   accent-color: #adffdd;
   touch-action: none;
 }
 .browse-meter output {
-  font-size: 10px;
+  grid-column: 1 / -1;
+  font-size: 11px;
   overflow-wrap: anywhere;
   text-align: center;
 }

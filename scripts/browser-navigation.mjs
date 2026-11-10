@@ -8,4 +8,6 @@ export async function navigate(page, name) {
     if (await toggle.count()) await toggle.click();
   }
   await link.click();
+  const menu = page.locator("#app-menu");
+  if (await menu.count()) await menu.waitFor({ state: "hidden" });
 }
