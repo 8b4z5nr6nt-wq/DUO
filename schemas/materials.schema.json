@@ -84,6 +84,16 @@
                           },
                           "required": ["en", "ja"]
                         }
+                      },
+                      "sentenceForm": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
+                      },
+                      "sentenceTranslation": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "\\S"
                       }
                     },
                     "required": ["number", "en", "ja"]

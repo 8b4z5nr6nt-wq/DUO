@@ -1,9 +1,10 @@
+import { navigate } from "../scripts/browser-navigation.mjs";
 import { test, expect } from "@playwright/test";
 async function demo(page) {
   await page.goto("/#data");
   await page.getByRole("button", { name: "開発用の架空データを追加" }).click();
   await expect(page.getByText("4 件登録済み")).toBeVisible();
-  await page.getByRole("link", { name: "学習", exact: true }).click();
+  await navigate(page, "学習");
 }
 const choose = (page) =>
   page.getByRole("button", { name: "範囲を選択", exact: true }).click();
@@ -123,7 +124,7 @@ test("番号指定と一覧選択を切り替え、通常の検索は詳細を�
     "番号で指定した範囲",
   );
   await expect(page.locator("#target-count")).toContainText("対象 1 問");
-  await page.getByRole("link", { name: "検索", exact: true }).click();
+  await navigate(page, "検索");
   await expect(page.locator("[data-pick-id]")).toHaveCount(0);
   await page.locator("#list a.list-item").click();
   await expect(

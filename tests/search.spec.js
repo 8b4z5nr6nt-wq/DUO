@@ -1,10 +1,11 @@
+import { navigate } from "../scripts/browser-navigation.mjs";
 import { test, expect } from "@playwright/test";
 
 async function demo(page) {
   await page.goto("/#data");
   await page.getByRole("button", { name: "開発用の架空データを追加" }).click();
   await expect(page.getByText("4 件登録済み")).toBeVisible();
-  await page.getByRole("link", { name: "検索", exact: true }).click();
+  await navigate(page, "検索");
 }
 
 const stage = (page) => page.locator(".section-stage");
@@ -72,7 +73,7 @@ async function importSparseFictionalItems(page) {
   await page.getByRole("button", { name: "取り込み前に確認" }).click();
   await page.getByRole("button", { name: "この内容を登録" }).click();
   await expect(page.getByText("6 件登録済み")).toBeVisible();
-  await page.getByRole("link", { name: "検索", exact: true }).click();
+  await navigate(page, "検索");
 }
 
 async function touchSession(page, context) {
@@ -423,7 +424,7 @@ test("画面のフェード表示は動きを減らす設定に従う", async ({
   );
   expect(animated).toBe(true);
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.getByRole("link", { name: "ホーム", exact: true }).click();
+  await navigate(page, "ホーム");
   const stillAnimated = await page.locator("#app > *").evaluateAll((elements) =>
     elements.some((element) => {
       const style = getComputedStyle(element);

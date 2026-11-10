@@ -1,4 +1,11 @@
 import {
+  answerScaffold,
+  scaffoldAnswer,
+  dailyWords,
+  cardWordSegments,
+} from "./study-tools.js";
+import { installMenu, closeMenu } from "./menu.js";
+import {
   quizSchedule,
   examSchedule,
   schedulePresets,
@@ -7,7 +14,7 @@ import {
 } from "./schedule.js";
 import { prepareImport, applyImport } from "./materials.js";
 import "./style.css";
-import { installSwipeNavigation } from "./swipe.js";
+import { installSwipeNavigation, classifySwipe } from "./swipe.js";
 import { emptyDrawing, hasInk, mountHandwriting } from "./handwriting.js";
 import {
   defaults,
@@ -65,7 +72,16 @@ function disposeCanvases() {
 function captureAnswer() {
   if (!study || study.phase !== "question") return;
   if (handwritingEditor) study.drawing = handwritingEditor.getDrawing();
-  if ($("#answer")) study.answer = $("#answer").value;
+  if ($("#answer")) {
+    const slots = [...app.querySelectorAll("[data-answer-slot]")];
+    if (slots.length) {
+      study.symbolValues = slots.map((el) => el.value);
+      study.answer = scaffoldAnswer(
+        answerScaffold(answerText()),
+        study.symbolValues,
+      );
+    } else study.answer = $("#answer").value;
+  }
 }
 function drawingHTML(drawing, label, id = "") {
   return hasInk(drawing)
@@ -119,6 +135,7 @@ async function commit(change) {
     return false;
   }
   busy = true;
+  document.querySelector("#menu-toggle").disabled = true;
   try {
     const candidate = structuredClone(state);
     change(candidate);
@@ -131,6 +148,7 @@ async function commit(change) {
     return false;
   } finally {
     busy = false;
+    document.querySelector("#menu-toggle").disabled = false;
   }
 }
 function link(route, label, primary = false) {
@@ -342,6 +360,189 @@ function setup() {
     }
   };
 }
+async function daily() {
+  if (study) {
+    app.innerHTML =
+      title("今日の10問") +
+      `<section class="card"><p>途中の学習があります。記録して終了してから始められます。</p>${link("learn", "途中の学習に戻る")}<button id="finish-for-daily">学習を終了して今日の10問へ</button></section>`;
+    $("#finish-for-daily").onclick = async () => {
+      await finish();
+      if (!study) location.hash = "daily";
+    };
+    return;
+  }
+  const queue = dailyWords(state, day());
+  if (!queue.length) {
+    app.innerHTML =
+      title("今日の10問") +
+      `<section class="card"><p>対象の単語がまだありません。キーボード回答で「覚えた」と評価した単語から出題します。</p><p>単語が10個未満の場合は、対象の単語だけを出題します。</p>${link("setup", "学習設定へ")}${link("data", "単語を登録する")}</section>`;
+    return;
+  }
+  app.innerHTML = title("今日の10問", "準備中…");
+  const session = {
+    id: crypto.randomUUID(),
+    started: Date.now(),
+    direction: "ja-en",
+    dailyDate: day(),
+    attempts: [],
+  };
+  if (!(await commit((s) => s.sessions.push(session)))) return;
+  // Do not change the saved regular study setup.
+  study = {
+    queue,
+    index: 0,
+    sessionId: session.id,
+    dailyDate: day(),
+    direction: "ja-en",
+    config: { ...state.settings, answerMode: "text" },
+    phase: "question",
+    elapsed: 0,
+    lastTick: performance.now(),
+    paused: false,
+    hints: 0,
+    answer: "",
+    inputMode: "text",
+    drawing: emptyDrawing(),
+    retried: false,
+  };
+  location.hash = "learn";
+}
+function learnCard() {
+  const item = current(),
+    revealed = study.phase !== "question",
+    disabled = study.paused || busy;
+  const parts =
+    study.direction === "en-ja" && item.kind === "sentence"
+      ? cardWordSegments(item, state.items)
+      : [{ text: study.direction === "en-ja" ? item.en : item.ja }];
+  app.innerHTML = `<div class="learning card-learning">${title("カード学習", `${study.index + 1} / ${study.queue.length} 問 · ${type(item)} ${item.number}`)}<div class="card-clock"><span id="timer"></span><button id="pause">${study.paused ? "再開" : "一時停止"}</button><progress id="card-timer" aria-label="残り時間" max="${study.config.limit}" value="${Math.max(0, study.config.limit - study.elapsed)}" ${study.config.timer ? "" : "hidden"}></progress></div><p id="paused" ${study.paused ? "" : "hidden"}>一時停止中です。</p><section class="swipe-card learning-card" aria-label="学習カード"><div class="card-question"><p class="prompt">${parts.map((part, i) => (part.translation ? `<button type="button" class="card-word" data-card-word="${i}" ${disabled ? "disabled" : ""}>${esc(part.text)}</button>` : esc(part.text))).join("")}</p><p id="card-word-meaning" role="status"></p></div><div class="card-answer" aria-live="polite">${revealed ? `<p>${esc(answerText())}</p>` : `<p class="muted">${study.config.timer ? "時間が来たら答えを表示します" : "答えを思い出しましょう"}</p>`}</div></section><p id="hint" hidden></p>${revealed ? `<p class="card-swipe-help">左へ：覚えていない　／　右へ：覚えた</p><div class="row card-ratings"><button data-card-rating="0" ${disabled ? "disabled" : ""}>覚えていない</button><button data-card-rating="1" ${disabled ? "disabled" : ""}>微妙</button><button class="primary" data-card-rating="2" ${disabled ? "disabled" : ""}>覚えた</button></div>` : `<button id="flip-card" ${disabled ? "disabled" : ""}>カードをめくる</button>`}<div class="row"><button id="skip" ${disabled ? "disabled" : ""}>スキップ</button><button id="finish" class="danger">ここで終了して結果を見る</button></div></div>`;
+  $("#pause").onclick = () => {
+    if (!study.paused) advanceClock();
+    study.paused = !study.paused;
+    study.lastTick = performance.now();
+    learn();
+  };
+  $("#finish").onclick = finish;
+  $("#skip").onclick = async () => {
+    if (await recordAttempt(null, "skip")) next();
+  };
+  if ($("#flip-card"))
+    $("#flip-card").onclick = () => {
+      if (study.paused || busy) return;
+      study.phase = "evaluate";
+      learn();
+    };
+  app.querySelectorAll("[data-card-word]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        if (study.paused || busy) return;
+        $("#card-word-meaning").textContent =
+          parts[Number(button.dataset.cardWord)].translation;
+        study.wordHints = (study.wordHints || 0) + 1;
+      }),
+  );
+  const rate = async (rating) => {
+    if (study.paused || busy || study.phase !== "evaluate") return false;
+    app
+      .querySelectorAll("[data-card-rating]")
+      .forEach((button) => (button.disabled = true));
+    if (await recordAttempt(rating, "unknown")) {
+      next();
+      return true;
+    }
+    learn();
+    return false;
+  };
+  app
+    .querySelectorAll("[data-card-rating]")
+    .forEach(
+      (button) =>
+        (button.onclick = () => rate(Number(button.dataset.cardRating))),
+    );
+  activeNavigation = {
+    previous: () => {
+      if (!revealed || study.paused || busy) return false;
+      void rate(2);
+      return true;
+    },
+    next: () => {
+      if (!revealed || study.paused || busy) return false;
+      void rate(0);
+      return true;
+    },
+  };
+  const card = $(".swipe-card");
+  let pointer = null,
+    suppressClick = false;
+  card.onpointerdown = (event) => {
+    if (pointer) {
+      pointer = null;
+      card.style.transform = "";
+      return;
+    }
+    if (
+      !revealed ||
+      study.paused ||
+      busy ||
+      event.button !== 0 ||
+      event.isPrimary === false
+    )
+      return;
+    pointer = {
+      id: event.pointerId,
+      // Screen coordinates stay stable when the viewport scrolls during a touch.
+      x: event.screenX,
+      y: event.screenY,
+      at: event.timeStamp,
+    };
+  };
+  card.onpointermove = (event) => {
+    if (!pointer || pointer.id !== event.pointerId) return;
+    const dx = event.screenX - pointer.x,
+      dy = event.screenY - pointer.y;
+    if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) {
+      pointer = null;
+      card.style.transform = "";
+      return;
+    }
+    if (Math.abs(dx) > 12) {
+      try {
+        card.setPointerCapture(event.pointerId);
+      } catch {}
+      card.style.transform = `translateX(${dx}px) rotate(${dx / 35}deg)`;
+    }
+  };
+  card.onpointercancel = () => {
+    pointer = null;
+    card.style.transform = "";
+  };
+  card.onpointerup = (event) => {
+    if (!pointer || pointer.id !== event.pointerId) return;
+    const direction = classifySwipe({
+      dx: event.screenX - pointer.x,
+      dy: event.screenY - pointer.y,
+      duration: event.timeStamp - pointer.at,
+    });
+    pointer = null;
+    card.style.transform = "";
+    if (direction) {
+      suppressClick = true;
+      void rate(direction === "previous" ? 2 : 0);
+    }
+  };
+  card.addEventListener(
+    "click",
+    (event) => {
+      if (suppressClick) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        suppressClick = false;
+      }
+    },
+    true,
+  );
+  updateClockUI();
+}
 function timingFields(s) {
   return `<div class="row"><label><input type="checkbox" name="timer" ${s.timer ? "checked" : ""}>時間制限を使う</label><label><input type="checkbox" name="hints" ${s.hints ? "checked" : ""}>ヒントを使う</label></div><div class="grid"><label>制限時間（秒）<input name="limit" type="number" min="1" max="3600" value="${s.limit}" required></label><label>ヒント開始（秒）<input name="hintStart" type="number" min="0" max="3600" value="${s.hintStart}" required></label><label>ヒント間隔（秒）<input name="hintInterval" type="number" min="1" max="300" value="${s.hintInterval}" required></label></div>`;
 }
@@ -364,6 +565,13 @@ function current() {
 function answerText() {
   const item = current();
   return study.direction === "en-ja" ? item.ja : item.en;
+}
+function typedAnswerHTML(disabled) {
+  const parts = !study.freeText && answerScaffold(answerText());
+  if (!parts)
+    return `<label>あなたの回答<textarea id="answer" lang="${study.direction === "ja-en" ? "en" : "ja"}" autocomplete="off" ${disabled}>${esc(study.answer)}</textarea></label>`;
+  const values = study.symbolValues || [];
+  return `<fieldset class="symbol-answer"><legend>あなたの回答（記号は入力済み）</legend><div class="symbol-slots">${parts.map((p) => (p.slot === undefined ? `<span class="answer-symbol">${esc(p.text)}</span>` : `<textarea ${p.slot === 0 ? 'id="answer"' : ""} data-answer-slot="${p.slot}" aria-label="${p.slot === 0 ? "あなたの回答" : `続きの回答 ${p.slot + 1}`}" lang="${study.direction === "ja-en" ? "en" : "ja"}" rows="2" ${disabled}>${esc(values[p.slot] || "")}</textarea>`)).join("")}</div><button type="button" id="free-text" ${disabled}>記号も含めて全文入力する</button></fieldset>`;
 }
 function answerFormHTML() {
   const disabled = study.paused ? "disabled" : "";
@@ -396,7 +604,7 @@ function answerFormHTML() {
       <canvas id="handwriting-answer" class="handwriting-canvas" aria-label="手書きの回答欄" aria-describedby="handwriting-help" aria-disabled="${study.paused}">手書きに対応していない場合はキーボードへ切り替えてください。</canvas>
       <p id="ink-status" class="ink-status" role="status" aria-live="polite"></p>
     </div>`
-        : `${study.inputMode === "scribble" ? '<p class="scribble-help">Apple Pencilで下の入力欄に書いてください。iPadOSのスクリブルで文字に変換後、「回答を確認」で採点します。変換した文字は修正できます。</p>' : ""}<label>あなたの回答<textarea id="answer" lang="${study.direction === "ja-en" ? "en" : "ja"}" autocomplete="off" ${disabled}>${esc(study.answer)}</textarea></label>`
+        : `${study.inputMode === "scribble" ? '<p class="scribble-help">Apple Pencilで下の入力欄に書いてください。iPadOSのスクリブルで文字に変換後、「回答を確認」で採点します。変換した文字は修正できます。</p>' : ""}${typedAnswerHTML(disabled)}`
     }
     <div class="row"><button class="primary" ${disabled}>回答を確認</button><button type="button" id="skip" ${disabled}>スキップ</button></div>
   </form>`;
@@ -426,15 +634,20 @@ function bindHandwriting() {
   update(study.drawing);
 }
 function learn() {
+  activeNavigation = null;
   disposeCanvases();
   if (!study) {
     app.innerHTML =
       title("学習を選んでください") + link("setup", "学習設定へ", true);
     return;
   }
+  if (study.inputMode === "card") {
+    learnCard();
+    return;
+  }
   const item = current(),
     prompt = study.direction === "en-ja" ? item.en : item.ja;
-  app.innerHTML = `<div class="learning">${title("学習", `${study.index + 1} / ${study.queue.length} 問 · ${type(item)} ${item.number} · セクション ${item.section} · ${study.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"}`)}<div class="row between"><span id="timer" aria-live="off"></span><button id="pause">${study.paused ? "再開" : "一時停止"}</button></div><p id="paused" ${study.paused ? "" : "hidden"}>一時停止中です。タイマーは進みません。</p><section class="card learning-card"><p class="prompt">${esc(prompt)}</p><p class="hint" id="hint"></p>${study.phase === "question" ? answerFormHTML() : evaluation()}</section><p class="muted">${study.retried ? "再挑戦中：前の間違いの記録は残ります。" : study.inputMode === "handwriting" ? "筆跡は文字に変換せず、正解と見比べて自己採点します。" : "文字回答は一致率で自動評価。言い換えは自己判定で変更できます。"}</p><button id="finish" class="danger">ここで終了して結果を見る</button></div>`;
+  app.innerHTML = `<div class="learning">${title(study.dailyDate ? "今日の10問" : "学習", `${study.index + 1} / ${study.queue.length} 問 · ${type(item)} ${item.number} · セクション ${item.section} · ${study.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"}`)}<div class="row between"><span id="timer" aria-live="off"></span><button id="pause">${study.paused ? "再開" : "一時停止"}</button></div><p id="paused" ${study.paused ? "" : "hidden"}>一時停止中です。タイマーは進みません。</p><section class="card learning-card"><p class="prompt">${esc(prompt)}</p><p class="hint" id="hint"></p>${study.phase === "question" ? answerFormHTML() : evaluation()}</section><p class="muted">${study.retried ? "再挑戦中：前の間違いの記録は残ります。" : study.inputMode === "handwriting" ? "筆跡は文字に変換せず、正解と見比べて自己採点します。" : "文字回答は一致率で自動評価。言い換えは自己判定で変更できます。"}</p><button id="finish" class="danger">ここで終了して結果を見る</button></div>`;
   $("#pause").onclick = () => {
     captureAnswer();
     if (!study.paused) advanceClock();
@@ -462,7 +675,15 @@ function learn() {
       };
     });
     const input = $("#answer");
-    if (input) {
+    if ($("#free-text"))
+      $("#free-text").onclick = () => {
+        captureAnswer();
+        study.freeText = true;
+        learn();
+      };
+    for (const input of app.querySelectorAll(
+      "#answer, [data-answer-slot]:not(#answer)",
+    )) {
       let composing = false,
         compositionEnded = -Infinity;
       input.addEventListener("compositionstart", () => (composing = true));
@@ -470,7 +691,7 @@ function learn() {
         composing = false;
         compositionEnded = performance.now();
       });
-      input.oninput = () => (study.answer = input.value);
+      input.oninput = captureAnswer;
       input.onkeydown = (e) => {
         if (
           e.key === "Enter" &&
@@ -481,11 +702,21 @@ function learn() {
           performance.now() - compositionEnded > 80
         ) {
           e.preventDefault();
-          if (!study.paused) submit();
+          if (!study.paused) {
+            const inputs = [
+              ...app.querySelectorAll(
+                "#answer, [data-answer-slot]:not(#answer)",
+              ),
+            ];
+            const nextInput = inputs[inputs.indexOf(input) + 1];
+            if (nextInput) nextInput.focus();
+            else submit();
+          }
         }
       };
-      if (!study.paused) input.focus();
-    } else if (study.inputMode === "handwriting") bindHandwriting();
+    }
+    if (input && !study.paused) input.focus();
+    if (study.inputMode === "handwriting") bindHandwriting();
     app.querySelectorAll("[data-choice]").forEach(
       (button) =>
         (button.onclick = () => {
@@ -532,6 +763,9 @@ function learn() {
         study.elapsed = 0;
         study.hints = 0;
         study.answer = "";
+        study.symbolValues = [];
+        study.freeText = false;
+        study.wordHints = 0;
         study.choices = null;
         study.drawing = emptyDrawing();
         study.retried = true;
@@ -613,7 +847,7 @@ async function recordAttempt(rating, correctness) {
         : {}),
       correctness,
       rating: rating ?? 0,
-      hints: study.hints,
+      hints: study.hints + (study.wordHints || 0),
       hintUnit: "word",
       at,
       retry: study.retried,
@@ -633,11 +867,11 @@ async function recordAttempt(rating, correctness) {
   });
 }
 function next() {
-  study.index++;
-  if (study.index >= study.queue.length) {
+  if (study.index + 1 >= study.queue.length) {
     finish();
     return;
   }
+  study.index++;
   Object.assign(study, {
     phase: "question",
     choices: null,
@@ -645,6 +879,9 @@ function next() {
     lastTick: performance.now(),
     hints: 0,
     answer: "",
+    symbolValues: [],
+    freeText: false,
+    wordHints: 0,
     drawing: emptyDrawing(),
     retried: false,
     timedOut: false,
@@ -682,9 +919,9 @@ function advanceClock() {
     if (s.config.timer && s.elapsed >= s.config.limit) {
       captureAnswer();
       s.elapsed = s.config.limit;
-      s.timedOut = true;
+      s.timedOut = s.inputMode !== "card";
       s.phase = "evaluate";
-      s.judgment = answerJudgment();
+      s.judgment = s.inputMode === "card" ? null : answerJudgment();
       if (location.hash === "#learn") learn();
     }
   }
@@ -694,14 +931,20 @@ function updateClockUI() {
   $("#timer").textContent = study.config.timer
     ? `残り ${Math.max(0, Math.ceil(study.config.limit - study.elapsed))} 秒`
     : "時間制限なし";
-  $("#hint").textContent = study.hints
-    ? `ヒント: ${hintWords(
-        answerText(),
-        study.direction === "ja-en" ? "en" : "ja",
-      )
-        .slice(0, study.hints)
-        .join(" ")}`
-    : "";
+  if ($("#card-timer"))
+    $("#card-timer").value =
+      study.phase === "question"
+        ? Math.max(0, study.config.limit - study.elapsed)
+        : 0;
+  if ($("#hint"))
+    $("#hint").textContent = study.hints
+      ? `ヒント: ${hintWords(
+          answerText(),
+          study.direction === "ja-en" ? "en" : "ja",
+        )
+          .slice(0, study.hints)
+          .join(" ")}`
+      : "";
 }
 setInterval(() => {
   advanceClock();
@@ -754,6 +997,7 @@ function selectionRow(i) {
   return `<label class="list-item range-item${rangeDraft.has(id) ? " selected" : ""}"><input type="checkbox" data-pick-id="${id}" aria-label="${type(i)} ${i.number}を選択" ${rangeDraft.has(id) ? "checked" : ""}><span class="item-body"><span class="item-number">${type(i)}${String(i.number).padStart(3, "0")}</span><span class="item-en">${esc(i.en)}</span><span class="item-ja">${esc(i.ja)}</span><span class="item-meta">セクション ${i.section}</span></span></label>`;
 }
 function search(requestedSection, picking = false) {
+  document.body.classList.add("browse-view");
   const view = picking ? rangeBrowse : browse;
   if (requestedSection !== undefined) {
     const n = Number(requestedSection);
@@ -782,6 +1026,10 @@ function search(requestedSection, picking = false) {
       ? `<div class="range-toolbar card"><span id="selection-count" role="status" aria-live="polite"></span><div class="row"><button id="confirm-range" class="primary">選択を確定</button><button id="cancel-range">キャンセル</button></div><button id="clear-selection">選択を全解除</button></div>`
       : "") +
     `<div class="browse-modes" role="group" aria-label="表示モード"><button class="browse-mode" data-mode="sentence" aria-pressed="${view.kind === "sentence"}">例文モード</button><button class="browse-mode" data-mode="word" aria-pressed="${view.kind === "word"}">単語モード</button></div><div class="search-tools card"><label>番号・英語・日本語<input id="query" type="search" placeholder="選んだモードの全セクションから検索" value="${esc(view.query)}"></label></div><p class="search-summary" role="status" aria-live="polite"></p><section class="section-browser card" aria-label="セクションごとの一覧"><div class="section-controls"><button id="section-previous" aria-label="前のセクション">← 前へ</button><span class="section-position" aria-label="セクションの位置"></span><button id="section-next" aria-label="次のセクション">次へ →</button></div><div class="section-tabs" role="group" aria-label="セクションを選択"></div><p class="section-hint muted">${picking ? "セクションやモードを切り替えて、学ぶ問題にチェックしてください。" : "一覧を左右にスワイプするとセクションが変わります。"}</p>${picking ? '<div class="row range-bulk"><button id="select-visible">表示中を全選択</button><button id="deselect-visible">表示中を解除</button></div>' : ""}<div id="list"></div></section>`;
+  app.insertAdjacentHTML(
+    "beforeend",
+    `<aside class="browse-meter" data-no-swipe><span aria-hidden="true">小</span><input type="range" id="browse-position" aria-label="セクション・番号へ移動" min="0" max="0" value="0"><span aria-hidden="true">大</span><output id="browse-position-label" for="browse-position"></output></aside>`,
+  );
   let sections = [];
   const move = (step) => {
     const index = sections.indexOf(view.section);
@@ -899,6 +1147,42 @@ function search(requestedSection, picking = false) {
       };
       updateSelection();
     }
+    const ordered = [...matches].sort(
+      (a, b) => a.section - b.section || a.number - b.number,
+    );
+    const meter = $("#browse-position");
+    const found = ordered.findIndex(
+      (i) => i.section === view.section && i.number === view.jumpNumber,
+    );
+    const position =
+      found >= 0
+        ? found
+        : Math.max(
+            0,
+            ordered.findIndex((i) => i.section === view.section),
+          );
+    meter.max = Math.max(0, ordered.length - 1);
+    meter.value = position;
+    meter.disabled = !ordered.length;
+    const item = ordered[position];
+    $("#browse-position-label").textContent = item
+      ? `§${item.section} / ${item.number}`
+      : "0件";
+    meter.setAttribute(
+      "aria-valuetext",
+      item ? `セクション ${item.section}・${label} ${item.number}` : "登録なし",
+    );
+    meter.oninput = () => {
+      const target = ordered[Number(meter.value)];
+      if (!target) return;
+      view.section = target.section;
+      view.jumpNumber = target.number;
+      update();
+      const row = picking
+        ? $(`[data-pick-id="${identity(target)}"]`)?.closest("label")
+        : $(`a[href="#detail/${target.kind}/${target.number}"]`);
+      row?.scrollIntoView({ block: "center", behavior: "instant" });
+    };
     activeNavigation = { previous: () => move(-1), next: () => move(1) };
   };
   $("#query").oninput = () => {
@@ -1416,6 +1700,8 @@ function settings() {
 }
 function render() {
   if (!state) return;
+  closeMenu();
+  document.body.classList.remove("browse-view");
   if (document.querySelector("#notice").dataset.tone === "success") notify("");
   activeNavigation = null;
   const [route = "home", ...parts] = location.hash.slice(1).split("/");
@@ -1435,6 +1721,7 @@ function render() {
     ({
       home,
       setup,
+      daily,
       learn,
       result,
       search,
@@ -1449,6 +1736,7 @@ function render() {
   )(...parts);
   window.scrollTo(0, 0);
 }
+installMenu(pauseForLeaving);
 window.addEventListener("hashchange", render);
 document.addEventListener("keydown", (event) => {
   if (

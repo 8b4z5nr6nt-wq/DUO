@@ -1,3 +1,4 @@
+import { navigate } from "./browser-navigation.mjs";
 // Real local Workers runtime + Chromium. All credentials and TLS keys below are test-only.
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
@@ -216,11 +217,11 @@ try {
   await owner.setOffline(true);
   await page.reload();
   await page.getByText("4 件登録済み").waitFor();
-  await page.getByRole("link", { name: "検索", exact: true }).click();
+  await navigate(page, "検索");
   await page.getByRole("button", { name: "単語モード", exact: true }).click();
   await page.getByLabel("番号・英語・日本語").fill("moon");
   assert.match(await page.locator("#list").textContent(), /月の庭/);
-  await page.getByRole("link", { name: "学習", exact: true }).click();
+  await navigate(page, "学習");
   await page.getByText("タイマー・ヒント", { exact: true }).click();
   await page.getByLabel("時間制限を使う").uncheck();
   await page.getByLabel("ヒントを使う").uncheck();

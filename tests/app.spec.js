@@ -1,3 +1,4 @@
+import { navigate } from "../scripts/browser-navigation.mjs";
 import { test, expect } from "@playwright/test";
 async function demo(page) {
   await page.goto("/#data");
@@ -5,7 +6,7 @@ async function demo(page) {
   await expect(page.getByText("4 件登録済み")).toBeVisible();
 }
 async function setup(page, kind = "word", direction = "ja-en", count = "1") {
-  await page.getByRole("link", { name: "学習", exact: true }).click();
+  await navigate(page, "学習");
   await page
     .getByRole("combobox", { name: "種類", exact: true })
     .selectOption(kind);
@@ -41,7 +42,7 @@ test("オフラインで再読み込み・検索・4方向学習・履歴保存�
   await context.setOffline(true);
   await page.reload();
   await expect(page.getByText("4 件登録済み")).toBeVisible();
-  await page.getByRole("link", { name: "検索", exact: true }).click();
+  await navigate(page, "検索");
   await page.getByRole("button", { name: "単語モード", exact: true }).click();
   await page.getByLabel("番号・英語・日本語").fill("moon");
   await expect(page.locator("#list")).toContainText("月の庭");
@@ -84,12 +85,12 @@ test("オフラインで再読み込み・検索・4方向学習・履歴保存�
     await expect(page.getByRole("heading", { name: "学習結果" })).toBeVisible();
   }
   await page.reload();
-  await page.getByRole("link", { name: "記録", exact: true }).click();
+  await navigate(page, "記録");
   await expect(page.getByRole("heading", { name: "学習履歴" })).toBeVisible();
   await expect(
     page.getByText("正解 1 / 不正解 1", { exact: false }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "データ", exact: true }).click();
+  await navigate(page, "データ");
   const downloaded = page.waitForEvent("download");
   await page.getByRole("button", { name: "JSONバックアップを保存" }).click();
   expect((await downloaded).suggestedFilename()).toContain("duo-backup");
@@ -97,7 +98,7 @@ test("オフラインで再読み込み・検索・4方向学習・履歴保存�
 });
 test("タイマー・ヒント・一時停止・時間切れ後の再挑戦", async ({ page }) => {
   await demo(page);
-  await page.getByRole("link", { name: "学習", exact: true }).click();
+  await navigate(page, "学習");
   await page.getByLabel("問題数（空欄は全問）").fill("1");
   await page.getByText("タイマー・ヒント", { exact: true }).click();
   await page.getByLabel("制限時間（秒）").fill("3");
@@ -164,7 +165,7 @@ test("取込検証・CSV登録・編集・追加統合と置換復元", async ({
   await page.getByRole("button", { name: "取り込み前に確認" }).click();
   await page.getByRole("button", { name: "この内容を登録" }).click();
   await expect(page.getByText("2 件登録済み")).toBeVisible();
-  await page.getByRole("link", { name: "検索", exact: true }).click();
+  await navigate(page, "検索");
   await page.getByRole("button", { name: "単語モード", exact: true }).click();
   await page.getByLabel("番号・英語・日本語").fill("test");
   await page.locator("#list a").click();
@@ -198,7 +199,7 @@ test("取込検証・CSV登録・編集・追加統合と置換復元", async ({
       hints: true,
     },
   };
-  await page.getByRole("link", { name: "データ", exact: true }).click();
+  await navigate(page, "データ");
   await page.locator("#backup-text").fill(JSON.stringify(backup));
   await page.getByRole("button", { name: "復元前に確認" }).click();
   await page.getByRole("button", { name: "この内容で復元" }).click();
@@ -237,7 +238,7 @@ test("IME確定中のEnterを送信せず、画面離脱時に停止する", asy
     );
   });
   await expect(page.getByRole("button", { name: "回答を確認" })).toBeVisible();
-  await page.getByRole("link", { name: "ホーム", exact: true }).click();
+  await navigate(page, "ホーム");
   await page.getByRole("link", { name: "途中の学習を再開" }).click();
   await expect(
     page.getByText("一時停止中です。タイマーは進みません。"),

@@ -78,6 +78,20 @@ export function prepareImport(raw, existing = [], mode = "add") {
   for (const item of all.values())
     if (item.sentenceNumber !== undefined) {
       const parent = all.get(`sentence:${item.sentenceNumber}`);
+      if (
+        item.sentenceTranslation &&
+        !parent?.ja.includes(item.sentenceTranslation)
+      )
+        throw Error(
+          `単語 ${item.number}: 例文内の日本語訳は対応する例文の訳に含まれる文字列にしてください。`,
+        );
+      if (
+        item.sentenceForm &&
+        !parent?.en.toLowerCase().includes(item.sentenceForm.toLowerCase())
+      )
+        throw Error(
+          `単語 ${item.number}: 例文内の表記が対応する英文にありません。`,
+        );
       if (!parent || parent.section !== item.section)
         throw Error(
           `単語 ${item.number}: 対応する例文・セクションが一致しません。`,

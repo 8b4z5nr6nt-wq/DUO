@@ -1,3 +1,4 @@
+import { navigate } from "./browser-navigation.mjs";
 // Browser regression for upgrades from the formerly cache-first app shell.
 // The HTTP fixture simulates session expiry and login; access.test.js tests real Worker auth.
 import assert from "node:assert/strict";
@@ -154,7 +155,7 @@ try {
   await page.goto(origin + "/#data");
   await page.getByRole("button", { name: "開発用の架空データを追加" }).click();
   await page.getByText("4 件登録済み").waitFor();
-  await page.getByRole("link", { name: "学習", exact: true }).click();
+  await navigate(page, "学習");
   await page.getByText("タイマー・ヒント", { exact: true }).click();
   await page.getByLabel("時間制限を使う").uncheck();
   await page.getByLabel("ヒントを使う").uncheck();

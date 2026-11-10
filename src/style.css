@@ -1394,3 +1394,214 @@ button {
     color: #d3e6f2;
   }
 }
+
+/* Navigation is available from the header instead of a permanent bottom bar. */
+#menu-toggle {
+  width: 46px;
+  min-height: 46px;
+  padding: 6px;
+  font-size: 28px;
+  flex: 0 0 auto;
+}
+header {
+  gap: 10px;
+}
+header #connection {
+  min-width: 0;
+  text-align: center;
+  font-size: 11px;
+}
+#app-menu {
+  position: fixed;
+  inset: 12px 12px auto auto;
+  width: min(320px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  margin: 0;
+  padding: 16px;
+  border: 1px solid #ffffffaa;
+  border-radius: 22px;
+  background: #e6f5f6f5;
+  color: #153b46;
+  box-shadow: 0 20px 60px #001c4044;
+}
+#app-menu:not([open]) {
+  display: none;
+}
+#app-menu::backdrop {
+  background: #00192877;
+  backdrop-filter: blur(5px);
+}
+#app-menu nav {
+  position: static;
+  display: grid;
+  width: auto;
+  transform: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 8px 0 0;
+  backdrop-filter: none;
+}
+#app-menu nav a {
+  text-align: left;
+  font-size: 17px;
+  padding: 12px;
+}
+body main {
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+html {
+  scroll-padding-bottom: 24px;
+}
+a.list-item,
+.focus-card .prompt,
+input,
+textarea,
+button {
+  scroll-margin-bottom: 24px;
+}
+.symbol-slots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.symbol-slots textarea {
+  flex: 1 1 120px;
+  min-width: 70px;
+  width: 120px;
+  min-height: 76px;
+}
+.answer-symbol {
+  font-size: 23px;
+  white-space: pre-wrap;
+}
+.symbol-answer legend {
+  font-weight: 650;
+}
+.card-clock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.card-clock progress {
+  flex-basis: 100%;
+  height: 14px;
+  margin: 0 0 10px;
+  accent-color: #4ee5bc;
+}
+.swipe-card {
+  width: min(100%, 480px);
+  aspect-ratio: 1;
+  margin: 12px auto;
+  border-radius: 20px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid #ffffffbb;
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  touch-action: pan-y pinch-zoom;
+  user-select: none;
+}
+.card-question,
+.card-answer {
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  justify-content: safe center;
+}
+.card-question {
+  border-bottom: 1px solid #6592a455;
+}
+.card-question .prompt,
+.card-answer p {
+  font-size: clamp(17px, 4.8vw, 24px);
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.card-word {
+  display: inline;
+  padding: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 5px;
+  background: transparent;
+  box-shadow: none;
+}
+#card-word-meaning {
+  font-size: 16px;
+  margin: 4px 0 0;
+  color: var(--ink);
+}
+.card-ratings {
+  justify-content: center;
+}
+.card-swipe-help {
+  text-align: center;
+  font-size: 14px;
+}
+body.browse-view main {
+  padding-right: 72px;
+}
+.browse-meter {
+  position: fixed;
+  right: max(8px, env(safe-area-inset-right));
+  top: 25vh;
+  width: 54px;
+  height: min(56vh, 480px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  z-index: 5;
+  color: white;
+  background: #073e5caa;
+  border: 1px solid #ffffff66;
+  border-radius: 16px;
+  padding: 8px 2px;
+  backdrop-filter: blur(15px);
+}
+.browse-meter input {
+  writing-mode: vertical-lr;
+  direction: ltr;
+  width: 36px;
+  height: 100%;
+  min-height: 60px;
+  padding: 0;
+  margin: 0;
+  accent-color: #adffdd;
+  touch-action: none;
+}
+.browse-meter output {
+  font-size: 10px;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+@media (prefers-color-scheme: dark) {
+  #app-menu {
+    background: #14232bf5;
+    color: #edf7ff;
+  }
+  #app-menu nav a {
+    color: #edf7ff;
+  }
+}
+/* These halves are scroll containers; declare touch action on them as well as
+   the outer card so horizontal gestures are not taken by the browser. */
+.card-question,
+.card-answer {
+  touch-action: pan-y pinch-zoom;
+}
