@@ -1,3 +1,4 @@
+import { navigate } from "../scripts/browser-navigation.mjs";
 import { test, expect } from "@playwright/test";
 async function stored(page) {
   return page.evaluate(async () => {
@@ -40,7 +41,7 @@ async function seed(page) {
     .getByRole("button", { name: "この内容を登録", exact: true })
     .click();
   await expect(page.getByText("13 件登録済み", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "学習", exact: true }).click();
+  await navigate(page, "学習");
 }
 test("予定表の選択を保存し追加範囲を含めて学習、一覧選択・手入力・初期化とも併用できる", async ({
   page,
@@ -72,7 +73,7 @@ test("予定表の選択を保存し追加範囲を含めて学習、一覧選�
   await expect(
     page.getByRole("heading", { name: "学習結果", exact: true }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "学習", exact: true }).click();
+  await navigate(page, "学習");
   await page
     .getByLabel("予定表から範囲指定")
     .selectOption("exam-proficiency-3");

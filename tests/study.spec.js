@@ -1,3 +1,4 @@
+import { navigate } from "../scripts/browser-navigation.mjs";
 import { test, expect } from "@playwright/test";
 async function seed(page) {
   await page.goto("/#data");
@@ -30,7 +31,7 @@ async function seed(page) {
     db.close();
   });
   await page.reload();
-  await page.getByRole("link", { name: "学習", exact: true }).click();
+  await navigate(page, "学習");
   await page
     .getByRole("combobox", { name: "種類", exact: true })
     .selectOption("word");
@@ -108,7 +109,7 @@ test("4択は4つの登録済み候補で自動採点し、カードは自己評
     page.getByRole("heading", { name: "一致率 100% · 覚えた" }),
   ).toBeVisible();
   await page.locator("#auto-next").click();
-  await page.getByRole("link", { name: "学習", exact: true }).click();
+  await navigate(page, "学習");
   await page
     .getByRole("combobox", { name: "回答方法", exact: true })
     .selectOption("card");

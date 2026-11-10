@@ -56,6 +56,15 @@
         >
       </div>
       <span id="connection"></span>
+      <button
+        type="button"
+        id="menu-toggle"
+        aria-label="メニューを開く"
+        aria-controls="app-menu"
+        aria-expanded="false"
+      >
+        <span aria-hidden="true">☰</span>
+      </button>
     </header>
     <div id="notice" role="alert" hidden></div>
     <aside id="app-update" class="update-banner" role="status" hidden>
@@ -63,11 +72,17 @@
       <a href="/auth/refresh" class="button" data-refresh-app>最新版を開く</a>
     </aside>
     <main id="app"></main>
-    <nav aria-label="メイン">
-      <a href="#home">ホーム</a><a href="#setup">学習</a
-      ><a href="#search">検索</a><a href="#progress">記録</a
-      ><a href="#data">データ</a><a href="#settings">設定</a>
-    </nav>
+    <dialog id="app-menu" aria-label="メニュー">
+      <button type="button" data-close-menu aria-label="メニューを閉じる">
+        閉じる ×
+      </button>
+      <nav aria-label="メイン">
+        <a href="#home">ホーム</a><a href="#setup">学習</a
+        ><a href="#daily">今日の10問</a><a href="#search">検索</a
+        ><a href="#progress">記録</a><a href="#data">データ</a
+        ><a href="#settings">設定</a>
+      </nav>
+    </dialog>
     <script type="module" src="/src/app.js"></script>
   </body>
 </html>

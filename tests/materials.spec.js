@@ -1,3 +1,4 @@
+import { navigate } from "../scripts/browser-navigation.mjs";
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 test("教材JSONをファイルで登録・更新し関連語を検索、履歴を保持する", async ({
@@ -27,7 +28,7 @@ test("教材JSONをファイルで登録・更新し関連語を検索、履歴�
   };
   await upload();
   await expect(page.getByText("2 件登録済み")).toBeVisible();
-  await page.getByRole("link", { name: "検索", exact: true }).click();
+  await navigate(page, "検索");
   await page.getByRole("button", { name: "単語モード", exact: true }).click();
   await page.getByLabel("番号・英語・日本語").fill("moon painter");
   await expect(page.locator("#list")).toContainText("paint");

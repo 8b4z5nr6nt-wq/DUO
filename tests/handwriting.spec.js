@@ -1,3 +1,4 @@
+import { navigate } from "../scripts/browser-navigation.mjs";
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -9,7 +10,7 @@ async function demo(page) {
 }
 
 async function setup(page, { mode = "handwriting", count = "1", limit } = {}) {
-  await page.getByRole("link", { name: "学習", exact: true }).click();
+  await navigate(page, "学習");
   await page
     .getByRole("combobox", { name: "種類", exact: true })
     .selectOption("word");
@@ -148,7 +149,7 @@ async function touchStroke(page, context, browserName) {
 }
 
 async function backup(page) {
-  await page.getByRole("link", { name: "データ", exact: true }).click();
+  await navigate(page, "データ");
   const downloading = page.waitForEvent("download");
   await page
     .getByRole("button", { name: "JSONバックアップを保存", exact: true })
@@ -158,7 +159,7 @@ async function backup(page) {
 }
 
 async function openSavedInk(page) {
-  await page.getByRole("link", { name: "記録", exact: true }).click();
+  await navigate(page, "記録");
   const detail = page
     .locator("details")
     .filter({
@@ -312,11 +313,11 @@ test("指の筆跡をオフラインで記録し、履歴・再読み込み・�
       return pixels.some((value, index) => index % 4 === 3 && value > 0);
     }),
   ).toBe(true);
-  await page.getByRole("link", { name: "学習", exact: true }).click();
+  await navigate(page, "学習");
   await page
     .getByRole("combobox", { name: "回答方法", exact: true })
     .selectOption("text");
-  await page.getByRole("link", { name: "データ", exact: true }).click();
+  await navigate(page, "データ");
   await page.locator("#restore-mode").selectOption("replace");
   await page.locator("#backup-text").fill(JSON.stringify(saved));
   await page.getByRole("button", { name: "復元前に確認", exact: true }).click();
@@ -325,17 +326,17 @@ test("指の筆跡をオフラインで記録し、履歴・再読み込み・�
     .getByRole("button", { name: "この内容で復元", exact: true })
     .click();
   await expect(page.getByText("4 件登録済み")).toBeVisible();
-  await page.getByRole("link", { name: "学習", exact: true }).click();
+  await navigate(page, "学習");
   await expect(
     page.getByRole("combobox", { name: "回答方法", exact: true }),
   ).toHaveValue("handwriting");
-  await page.getByRole("link", { name: "データ", exact: true }).click();
+  await navigate(page, "データ");
   await page.reload();
   const restored = await openSavedInk(page);
   expect(await raster(restored)).toBe(previousRaster);
   const exportedAgain = await backup(page);
   expect(exportedAgain.sessions[0].attempts[0].drawing).toEqual(drawing);
-  await page.getByRole("link", { name: "学習", exact: true }).click();
+  await navigate(page, "学習");
   await expect(
     page.getByRole("combobox", { name: "回答方法", exact: true }),
   ).toHaveValue("handwriting");

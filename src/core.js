@@ -254,6 +254,20 @@ export function validateItems(raw, existing = [], allowUpdate = false) {
           return { en: v.en.trim(), ja: v.ja.trim() };
         });
       }
+      for (const f of ["sentenceForm", "sentenceTranslation"]) {
+        if (r[f] !== undefined) {
+          if (
+            r.kind !== "word" ||
+            !Number.isSafeInteger(r.sentenceNumber) ||
+            typeof r[f] !== "string" ||
+            !r[f].trim()
+          )
+            throw Error(
+              "例文内の表記・訳には対応例文番号と空でない文字列が必要です",
+            );
+          item[f] = r[f].trim();
+        }
+      }
       for (const f of ["aliasesEn", "aliasesJa", "related"]) {
         const v = r[f] ?? [];
         if (Array.isArray(v) && v.every((x) => typeof x === "string"))
