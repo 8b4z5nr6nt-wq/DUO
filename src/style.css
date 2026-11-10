@@ -1514,7 +1514,8 @@ button {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
+  justify-content: safe center;
 }
 .card-question {
   border-bottom: 1px solid #6592a455;

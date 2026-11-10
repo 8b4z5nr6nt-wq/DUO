@@ -253,3 +253,41 @@ test("今日の10問はキーボードで覚えた単語を日本語から英語
   expect(s.sessions.at(-1).direction).toBe("ja-en");
   expect(s.sessions.at(-1).attempts).toHaveLength(1);
 });
+
+test("長い例文カードは先頭から読めて上下の本文を個別にスクロールできる", async ({
+  page,
+}) => {
+  await seed(page, [
+    {
+      kind: "sentence",
+      number: 1,
+      section: 1,
+      en: "A robot paints a moon. ".repeat(30).trim(),
+      ja: "ロボットが月を描く。".repeat(40),
+    },
+  ]);
+  await navigate(page, "学習");
+  await page
+    .getByRole("combobox", { name: "回答方法", exact: true })
+    .selectOption("card");
+  await page.getByText("タイマー・ヒント", { exact: true }).click();
+  await page.getByLabel("時間制限を使う").uncheck();
+  await page.getByRole("button", { name: "学習を開始", exact: true }).click();
+  await page
+    .getByRole("button", { name: "カードをめくる", exact: true })
+    .click();
+  for (const selector of [".card-question", ".card-answer"]) {
+    const metrics = await page.locator(selector).evaluate((el) => {
+      el.scrollTop = 0;
+      const start = el.querySelector("p").getBoundingClientRect().top;
+      const top = el.getBoundingClientRect().top;
+      const height = el.clientHeight;
+      const total = el.scrollHeight;
+      el.scrollTop = total;
+      return { start, top, height, total, scrolled: el.scrollTop };
+    });
+    expect(metrics.start).toBeGreaterThanOrEqual(metrics.top);
+    expect(metrics.total).toBeGreaterThan(metrics.height);
+    expect(metrics.scrolled).toBeGreaterThan(0);
+  }
+});
