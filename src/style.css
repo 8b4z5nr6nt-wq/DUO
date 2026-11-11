@@ -1619,26 +1619,117 @@ button {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 2px 10px;
+  gap: 0 10px;
   margin-bottom: 16px;
   z-index: 5;
   color: white;
-  background: #073e5caa;
-  border: 1px solid #ffffff66;
+  background: linear-gradient(120deg, #003d42ef, #021c42f5);
+  border: 1px solid #6cebd540;
   border-radius: 16px;
-  padding: 8px 12px;
+  padding: 2px 12px 8px;
   backdrop-filter: blur(15px);
+  box-shadow:
+    0 8px 24px #00162826,
+    inset 0 1px 0 #b2fff01a;
+}
+.glass-meter {
+  position: relative;
+  min-width: 0;
+  height: 76px;
+  isolation: isolate;
+}
+.meter-rail {
+  position: absolute;
+  inset: calc(50% - 3px) 4px auto;
+  height: 6px;
+  border: 1px solid #9cfff1;
+  border-radius: 999px;
+  background: linear-gradient(#b5fff0, #00b99c 28%, #024d60 60%, #51d7ff);
+  box-shadow:
+    0 -2px 8px #00f8be80,
+    0 2px 10px #00bdff70;
+  pointer-events: none;
+}
+.meter-halo {
+  position: absolute;
+  left: calc(40px + (100% - 80px) * var(--meter-position, 0));
+  top: 50%;
+  width: 80px;
+  height: 72px;
+  transform: translate(-50%, -50%);
+  background: url("./assets/meter-halo.svg") center / 100% 100% no-repeat;
+  pointer-events: none;
+}
+.meter-halo::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 48px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid #e9fffd;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    #c8fff5,
+    #fffffff5 18%,
+    #91c5d6da 52%,
+    #edffff 88%,
+    #b9faff
+  );
+  box-shadow:
+    0 0 7px #d7ffefb3,
+    0 -3px 15px #00edbd80,
+    0 3px 15px #00c8ff80,
+    inset 0 0 5px #ffffffd9;
 }
 .browse-meter input {
+  position: relative;
+  z-index: 1;
+  appearance: none;
+  -webkit-appearance: none;
   writing-mode: horizontal-tb;
   direction: ltr;
   width: 100%;
-  height: 24px;
-  min-height: 24px;
+  height: 76px;
+  min-height: 44px;
   padding: 0;
   margin: 0;
-  accent-color: #adffdd;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+  cursor: ew-resize;
   touch-action: none;
+}
+.browse-meter input::-webkit-slider-runnable-track {
+  height: 6px;
+  background: transparent;
+}
+.browse-meter input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 80px;
+  height: 64px;
+  margin-top: -29px;
+  border: 0;
+  background: transparent;
+}
+.browse-meter input::-moz-range-track {
+  height: 6px;
+  background: transparent;
+}
+.browse-meter input::-moz-range-thumb {
+  width: 80px;
+  height: 64px;
+  border: 0;
+  background: transparent;
+}
+.glass-meter.is-empty {
+  opacity: 0.45;
+}
+.glass-meter.is-empty input {
+  cursor: default;
 }
 .browse-meter output {
   grid-column: 1 / -1;
