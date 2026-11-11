@@ -5,6 +5,7 @@ import {
   cardWordSegments,
 } from "./study-tools.js";
 import { installMenu, closeMenu } from "./menu.js";
+import { mountGlassMeter } from "./glass-meter.js";
 import {
   quizSchedule,
   examSchedule,
@@ -61,6 +62,7 @@ let state,
   lastResult = null;
 const browse = { kind: "sentence", section: null, query: "" };
 let activeNavigation = null;
+let meterController = null;
 let detailNavigationFocus = null;
 let handwritingEditor = null;
 let canvasControllers = [];
@@ -997,6 +999,8 @@ function selectionRow(i) {
   return `<label class="list-item range-item${rangeDraft.has(id) ? " selected" : ""}"><input type="checkbox" data-pick-id="${id}" aria-label="${type(i)} ${i.number}を選択" ${rangeDraft.has(id) ? "checked" : ""}><span class="item-body"><span class="item-number">${type(i)}${String(i.number).padStart(3, "0")}</span><span class="item-en">${esc(i.en)}</span><span class="item-ja">${esc(i.ja)}</span><span class="item-meta">セクション ${i.section}</span></span></label>`;
 }
 function search(requestedSection, picking = false) {
+  meterController?.destroy();
+  meterController = null;
   document.body.classList.add("browse-view");
   const view = picking ? rangeBrowse : browse;
   if (requestedSection !== undefined) {
@@ -1028,7 +1032,7 @@ function search(requestedSection, picking = false) {
     `<div class="browse-modes" role="group" aria-label="表示モード"><button class="browse-mode" data-mode="sentence" aria-pressed="${view.kind === "sentence"}">例文モード</button><button class="browse-mode" data-mode="word" aria-pressed="${view.kind === "word"}">単語モード</button></div><div class="search-tools card"><label>番号・英語・日本語<input id="query" type="search" placeholder="選んだモードの全セクションから検索" value="${esc(view.query)}"></label></div><p class="search-summary" role="status" aria-live="polite"></p><section class="section-browser card" aria-label="セクションごとの一覧"><div class="section-controls"><button id="section-previous" aria-label="前のセクション">← 前へ</button><span class="section-position" aria-label="セクションの位置"></span><button id="section-next" aria-label="次のセクション">次へ →</button></div><div class="section-tabs" role="group" aria-label="セクションを選択"></div><p class="section-hint muted">${picking ? "セクションやモードを切り替えて、学ぶ問題にチェックしてください。" : "一覧を左右にスワイプするとセクションが変わります。"}</p>${picking ? '<div class="row range-bulk"><button id="select-visible">表示中を全選択</button><button id="deselect-visible">表示中を解除</button></div>' : ""}<div id="list"></div></section>`;
   app.insertAdjacentHTML(
     "afterbegin",
-    `<aside class="browse-meter" data-no-swipe><span aria-hidden="true">小</span><div class="glass-meter"><span class="meter-rail" aria-hidden="true"></span><span class="meter-halo" aria-hidden="true"></span><input type="range" id="browse-position" aria-label="セクション・番号へ移動" min="0" max="0" value="0"></div><span aria-hidden="true">大</span><output id="browse-position-label" for="browse-position"></output></aside>`,
+    `<aside class="browse-meter" data-no-swipe><span aria-hidden="true">小</span><div class="glass-meter"><input type="range" id="browse-position" aria-label="セクション・番号へ移動" min="0" max="0" value="0"></div><span aria-hidden="true">大</span><output id="browse-position-label" for="browse-position"></output></aside>`,
   );
   let sections = [];
   const move = (step) => {
@@ -1164,11 +1168,7 @@ function search(requestedSection, picking = false) {
     meter.max = Math.max(0, ordered.length - 1);
     meter.value = position;
     meter.disabled = !ordered.length;
-    meter.parentElement.style.setProperty(
-      "--meter-position",
-      ordered.length > 1 ? position / (ordered.length - 1) : 0,
-    );
-    meter.parentElement.classList.toggle("is-empty", !ordered.length);
+    meterController?.sync();
     const item = ordered[position];
     $("#browse-position-label").textContent = item
       ? `§${item.section} / ${item.number}`
@@ -1239,6 +1239,8 @@ function search(requestedSection, picking = false) {
     };
   }
   update();
+  meterController = mountGlassMeter($("#browse-position"));
+  meterController.sync();
 }
 function itemLink(i) {
   const metadata = [
@@ -1705,6 +1707,8 @@ function settings() {
 }
 function render() {
   if (!state) return;
+  meterController?.destroy();
+  meterController = null;
   closeMenu();
   document.body.classList.remove("browse-view");
   if (document.querySelector("#notice").dataset.tone === "success") notify("");
