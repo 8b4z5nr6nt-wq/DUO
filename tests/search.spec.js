@@ -168,9 +168,7 @@ test("例文・単語モードを切り替え、1 セクションだけに番号
   await expect(stage(page).locator(".item-ja")).toHaveText(
     "私のロボットは青いトマトを育てます。",
   );
-  await expect(page.locator(".search-summary")).toHaveText(
-    "検索結果 2 件 / 登録済み 2 件",
-  );
+  await expect(page.locator(".search-summary")).toHaveText("2 件");
   await expect(page.locator(".section-tabs button")).toHaveCount(2);
   await expect(page.locator(".section-position")).toHaveText("1 / 2");
   await expect(page.locator("#section-previous")).toBeDisabled();
@@ -202,9 +200,7 @@ test("選択モード内の全セクションを英語・日本語・別解・�
   const query = page.getByLabel("番号・英語・日本語");
   await query.fill("DRAGON");
   await expectSection(page, 2, ["例文002"]);
-  await expect(page.locator(".search-summary")).toHaveText(
-    "検索結果 1 件 / 登録済み 2 件",
-  );
+  await expect(page.locator(".search-summary")).toHaveText("1 / 2 件");
   await query.fill("ロボット");
   await expectSection(page, 1, ["例文001"]);
   await query.fill("001");
@@ -223,9 +219,7 @@ test("選択モード内の全セクションを英語・日本語・別解・�
       exact: true,
     }),
   ).toBeVisible();
-  await expect(page.locator(".search-summary")).toHaveText(
-    "検索結果 0 件 / 登録済み 2 件",
-  );
+  await expect(page.locator(".search-summary")).toHaveText("0 / 2 件");
   await query.fill("");
   await expect(stage(page).locator("a.list-item")).toHaveCount(1);
 });

@@ -220,7 +220,7 @@ try {
   assert.equal(counts.refresh, 1);
   assert.equal(counts.login, 1);
   await page.getByRole("link", { name: "Complete fictional login" }).click();
-  await page.getByRole("heading", { name: "今日の一歩を。" }).waitFor();
+  await page.getByRole("heading", { name: "ホーム" }).waitFor();
   assert.equal(await marker(), "updated");
   assert.deepEqual(await stored(), before);
   const deadline = Date.now() + 15000;
@@ -255,7 +255,7 @@ try {
     .locator(".version-card")
     .getByRole("link", { name: "最新版を開く" })
     .click();
-  await page.getByRole("heading", { name: "今日の一歩を。" }).waitFor();
+  await page.getByRole("heading", { name: "ホーム" }).waitFor();
   assert.equal(counts.refresh, 1); // Static hosting updates without an auth endpoint.
   assert.equal(await marker(), "updated");
   assert.deepEqual(await stored(), before);

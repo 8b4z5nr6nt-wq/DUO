@@ -71,7 +71,7 @@ test("オフラインで再読み込み・検索・4方向学習・履歴保存�
   await expect(page.getByRole("heading", { name: "学習結果" })).toBeVisible();
   await expect(page.getByText("2 回答", { exact: false })).toBeVisible();
   await expect(
-    page.getByText("正解 1 / 不正解 1", { exact: false }),
+    page.getByRole("img", { name: /正解 1 \/ 不正解 1/ }),
   ).toBeVisible();
   for (const [kind, direction, answer] of [
     ["word", "en-ja", "月の庭"],
@@ -88,7 +88,7 @@ test("オフラインで再読み込み・検索・4方向学習・履歴保存�
   await navigate(page, "記録");
   await expect(page.getByRole("heading", { name: "学習履歴" })).toBeVisible();
   await expect(
-    page.getByText("正解 1 / 不正解 1", { exact: false }),
+    page.getByRole("img", { name: /正解 1 \/ 不正解 1/ }),
   ).toBeVisible();
   await navigate(page, "データ");
   const downloaded = page.waitForEvent("download");
@@ -126,7 +126,7 @@ test("タイマー・ヒント・一時停止・時間切れ後の再挑戦", as
     page.getByRole("heading", { name: "時間切れ", exact: true }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: "覚えた", exact: true }).click();
-  await expect(page.getByText("時間切れ 1", { exact: false })).toBeVisible();
+  await expect(page.getByRole("img", { name: /時間切れ 1/ })).toBeVisible();
 });
 test("取込検証・CSV登録・編集・追加統合と置換復元", async ({ page }) => {
   await page.goto("/#data");
@@ -238,10 +238,16 @@ test("IME確定中のEnterを送信せず、画面離脱時に停止する", asy
     );
   });
   await expect(page.getByRole("button", { name: "回答を確認" })).toBeVisible();
+  await page
+    .getByRole("button", { name: "メニューを開く", exact: true })
+    .click();
+  await expect(page.locator("#paused")).toBeVisible();
   await navigate(page, "ホーム");
   await page.getByRole("link", { name: "途中の学習を再開" }).click();
+  await expect(page.locator("#paused")).toBeHidden();
+  await expect(page.locator("#answer")).toHaveValue("変換中");
   await expect(
-    page.getByText("一時停止中です。タイマーは進みません。"),
+    page.getByRole("button", { name: "一時停止", exact: true }),
   ).toBeVisible();
 });
 test("容量不足は日本語で表示し、未保存データを登録済みにしない", async ({

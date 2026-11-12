@@ -5,7 +5,6 @@ import {
   cardWordSegments,
 } from "./study-tools.js";
 import { installMenu, closeMenu } from "./menu.js";
-import { mountGlassMeter } from "./glass-meter.js";
 import {
   quizSchedule,
   examSchedule,
@@ -62,7 +61,6 @@ let state,
   lastResult = null;
 const browse = { kind: "sentence", section: null, query: "" };
 let activeNavigation = null;
-let meterController = null;
 let detailNavigationFocus = null;
 let handwritingEditor = null;
 let canvasControllers = [];
@@ -157,7 +155,7 @@ function link(route, label, primary = false) {
   return `<a class="button ${primary ? "primary" : ""}" href="#${route}">${label}</a>`;
 }
 function title(name, desc = "") {
-  return `<h1>${name}</h1><p class="muted">${desc}</p>`;
+  return `<h1>${name}</h1>${desc ? `<p class="muted">${desc}</p>` : ""}`;
 }
 function help() {
   return `<details><summary>iPhone・iPadで使う／オフライン確認</summary><p>SafariでHTTPS配信されたアプリを開き、初回読み込み後「オフライン準備完了」を確認します。共有ボタン →「ホーム画面に追加」で登録してください（機種・OSでメニューが異なります）。</p><p>機内モードにしてアプリを開き直し、検索・学習・履歴保存を確認してください。初回はオンライン接続が必要です。Safariのサイトデータ削除・端末の容量整理でデータが失われる場合があります。定期的にJSONバックアップを保存してください。アカウントや同期機能はありません。</p></details>`;
@@ -169,14 +167,35 @@ function home() {
   const due = Object.values(state.records).filter(
     (r) => r.due <= Date.now(),
   ).length;
+  const goal = state.settings.goal;
+  const percent = Math.min(100, (today / goal) * 100);
+  const savedSetup =
+    state.settings.studyOptions && state.items.length && !study;
   app.innerHTML =
-    title("今日の一歩を。", "自分で登録した英語を、自分のペースで。") +
-    `${study ? '<p><a class="button primary" href="#learn">途中の学習を再開</a></p>' : ""}<div class="grid"><section class="card"><p class="muted">今日の学習 / 目標 ${state.settings.goal} 問</p><div class="big">${today}<small> 問</small></div><progress max="${state.settings.goal}" value="${today}"></progress><p>${today >= state.settings.goal ? "目標達成です。" : "あと " + (state.settings.goal - today) + " 問"}</p></section><section class="card"><p class="muted">登録済み</p><div class="big">${state.items.length}<small> 件</small></div><p>復習期限到来 ${due} 方向別問題</p></section></div><section class="card"><h2>学習を始める</h2><p>例文も単語も、書いて思い出す。範囲と回答方法を選んで始めましょう。</p>${link("setup", "学習設定へ", true)} ${link("search", "登録済みデータを見る")}</section>${state.items.length ? "" : `<section class="card"><h2>まだ問題がありません</h2><p>教材データは同梱されていません。自分で確認した内容を登録してください。動作確認には開発用の架空データを使えます。</p>${link("data", "データを登録する")}</section>`}${help()}`;
+    '<div class="home-layout">' +
+    title("ホーム") +
+    `<section class="card home-today"><div class="goal-figure"><svg viewBox="0 0 120 120" role="img" aria-label="今日 ${today}問 / 目標 ${goal}問"><circle class="goal-track" cx="60" cy="60" r="50"/><circle class="goal-fill" cx="60" cy="60" r="50" pathLength="100" stroke-dasharray="${percent} 100" style="opacity:${today ? 1 : 0}"/></svg><span aria-hidden="true"><strong>${today}</strong><small>/ ${goal}問</small></span></div><div><h2>今日の学習</h2><p>${today >= goal ? "目標達成 ✓" : `あと ${goal - today}問`}</p><p class="home-meta">${state.items.length} 件登録済み${due ? ` · 復習待ち ${due}件` : ""}</p></div></section><section class="home-actions">${study ? '<a class="button primary" id="resume-study" href="#learn">途中の学習を再開</a>' : !state.items.length ? link("data", "データを登録する", true) : savedSetup ? '<button class="primary" id="quick-start">前回の設定で開始</button>' : link("setup", "学習設定へ", true)}${state.items.length ? `<div class="home-shortcuts">${savedSetup || study ? link("setup", "範囲・方法") : ""}${link("search", "検索")}${link("daily", "今日の10問")}</div>` : `<ol class="flow-steps" aria-label="学習の流れ"><li>教材を登録</li><li>範囲を選ぶ</li><li>学習する</li></ol>`}</section></div>`;
+  if ($("#resume-study"))
+    $("#resume-study").onclick = () => {
+      study.paused = false;
+      study.lastTick = performance.now();
+    };
+  if ($("#quick-start"))
+    $("#quick-start").onclick = async () => {
+      try {
+        await startStudy(selectItems(state, options), {
+          ...state.settings,
+          answerMode: options.answerMode,
+        });
+      } catch (e) {
+        notify(e.message);
+      }
+    };
 }
 function setup() {
   app.innerHTML =
-    title("学習設定", "未登録の番号は対象外になります。") +
-    `${study ? '<p><a class="button" href="#learn">途中の学習に戻る</a></p>' : ""}<form id="setup-form"><div class="grid"><label>種類<select name="kind"><option value="sentence">例文</option><option value="word">単語</option><option value="all">例文と単語</option></select></label><label>出題方向<select name="direction"><option value="en-ja">英語 → 日本語</option><option value="ja-en">日本語 → 英語</option></select></label></div><label>回答方法<select name="answerMode"><option value="text">キーボード</option><option value="scribble">手書き（Apple Pencil）・スクリブル自動採点</option><option value="choice">4択問題</option><option value="card">カード形式</option><option value="handwriting">筆跡を保存（Apple Pencil・指／自己採点）</option></select></label><p class="muted">iPadOSのスクリブルを有効にし、回答欄にApple Pencilで書くと、変換された文字を自動採点します。4択には同じ種類の異なる答えが4件以上必要です。</p><label>予定表から範囲指定<select name="scheduleRange" id="schedule-range"><option value="" disabled>小テスト・考査を選択</option>${[
+    title("学習設定") +
+    `${study ? '<p><a class="button" href="#learn">途中の学習に戻る</a></p>' : ""}<form id="setup-form"><div class="grid"><label>種類<select name="kind"><option value="sentence">例文</option><option value="word">単語</option><option value="all">例文と単語</option></select></label><label>出題方向<select name="direction"><option value="en-ja">英語 → 日本語</option><option value="ja-en">日本語 → 英語</option></select></label></div><label>回答方法<select name="answerMode"><option value="text">キーボード</option><option value="scribble">手書き（Apple Pencil）・スクリブル自動採点</option><option value="choice">4択問題</option><option value="card">カード形式</option><option value="handwriting">筆跡を保存（Apple Pencil・指／自己採点）</option></select></label><details class="compact-help"><summary>回答方法のヘルプ</summary><p>Apple Pencil：スクリブルで変換した文字を自動採点。4択：異なる答えが4件以上必要。筆跡保存：正解と比べて自己採点。</p></details><label>予定表から範囲指定<select name="scheduleRange" id="schedule-range"><option value="" disabled>小テスト・考査を選択</option>${[
       ["小テスト", quizSchedule],
       ["定期考査・実力テスト", examSchedule],
     ]
@@ -186,7 +205,7 @@ function setup() {
       )
       .join(
         "",
-      )}</select></label><div class="range-controls"><div class="row between"><button type="button" id="choose-range">範囲を選択</button><button type="button" id="clear-range">全範囲に戻す</button></div><p id="range-summary" class="muted" aria-live="polite"></p></div><details><summary>番号を入力して範囲指定</summary><fieldset><legend>番号で範囲指定（空欄は全範囲）</legend><label>セクション<input name="sections" placeholder="例: 1-5,8"></label><div class="grid"><label>例文番号<input name="sentences" placeholder="例: 1-20"></label><label>単語番号<input name="words" placeholder="例: 1-50"></label></div></fieldset></details><div class="grid"><label>絞り込み<select name="filter"><option value="all">登録済みすべて</option><option value="weak">苦手（微妙・覚えてない）</option><option value="due">復習期限が来た問題</option><option value="favorite">お気に入り</option><option value="review">要復習マーク</option></select></label><label>順序<select name="order"><option value="number">番号順</option><option value="random">ランダム</option></select></label><label>問題数（空欄は全問）<input type="number" name="count" min="1" max="10000" placeholder="全問"></label></div><details><summary>タイマー・ヒント</summary><fieldset><legend>時間設定</legend>${timingFields(state.settings)}</fieldset></details><p id="target-count" aria-live="polite"></p><button class="primary" type="submit">学習を開始</button><button type="button" id="reset-study">学習設定を初期化</button></form>`;
+      )}</select></label><div class="range-controls"><div class="row between"><button type="button" id="choose-range">範囲を選択</button><button type="button" id="clear-range">全範囲に戻す</button></div><p id="range-summary" class="muted" aria-live="polite"></p></div><details><summary>番号を入力して範囲指定</summary><fieldset><legend>番号で範囲指定（空欄は全範囲）</legend><label>セクション<input name="sections" placeholder="例: 1-5,8"></label><div class="grid"><label>例文番号<input name="sentences" placeholder="例: 1-20"></label><label>単語番号<input name="words" placeholder="例: 1-50"></label></div></fieldset></details><div class="grid"><label>絞り込み<select name="filter"><option value="all">登録済みすべて</option><option value="weak">苦手（微妙・覚えてない）</option><option value="due">復習期限が来た問題</option><option value="favorite">お気に入り</option><option value="review">要復習マーク</option></select></label><label>順序<select name="order"><option value="number">番号順</option><option value="random">ランダム</option></select></label><label>問題数（空欄は全問）<input type="number" name="count" min="1" max="10000" placeholder="全問"></label></div><details><summary>タイマー・ヒント</summary><fieldset><legend>時間設定</legend>${timingFields(state.settings)}</fieldset></details><div class="study-startbar"><p id="target-count" aria-live="polite"></p><button class="primary" type="submit">学習を開始</button></div><button type="button" id="reset-study">学習設定を初期化</button></form>`;
   $("#reset-study").onclick = async () => {
     if (
       await commit((s) => {
@@ -242,14 +261,14 @@ function setup() {
             i.number <= preset.end,
         ).length;
       $("#range-summary").textContent = preset
-        ? `${preset.label}：例文${preset.start}〜${preset.end}（予定${preset.end - preset.start + 1}問・登録済み${registered}問）。未登録の例文は出題しません。`
+        ? `${preset.label}：例文${preset.start}〜${preset.end}（予定${preset.end - preset.start + 1}問・登録済み${registered}問）。`
         : chosen
-          ? `一覧から ${chosen.length} 問選択（例文 ${chosen.filter((i) => i.kind === "sentence").length} / 単語 ${chosen.filter((i) => i.kind === "word").length}）。種類・絞り込みは下の対象数に反映されます。`
+          ? `一覧から ${chosen.length} 問選択（例文 ${chosen.filter((i) => i.kind === "sentence").length} / 単語 ${chosen.filter((i) => i.kind === "word").length}）。`
           : [options.sections, options.sentences, options.words].some(Boolean)
             ? "番号で指定した範囲を使用中です。"
-            : "全範囲から出題します。一覧で問題を選べます。";
+            : "全範囲から出題します。";
       $("#target-count").textContent =
-        `対象 ${n} 問 / 出題 ${Math.min(n, Number(options.count) || n)} 問`;
+        `対象 ${n} 問${Number(options.count) && Number(options.count) < n ? ` · 出題 ${Number(options.count)}問` : ""}`;
       form.querySelector('[type="submit"]').disabled = n === 0;
     } catch (e) {
       $("#target-count").textContent = e.message;
@@ -308,59 +327,61 @@ function setup() {
     e.preventDefault();
     try {
       await pendingSave;
-      let queue = read();
-      const config = {
+      await startStudy(read(), {
         ...readTiming(form, state.settings),
         answerMode: options.answerMode,
-      };
-      validateSettings(config);
-      if (
-        config.answerMode === "choice" &&
-        queue.some(
-          (item) =>
-            !choiceAnswers(item, state.items, options.direction, config).length,
-        )
-      )
-        throw Error(
-          "4択には同じ種類の異なる正解が4件以上必要です。問題を追加するか、別の回答方法を選んでください。",
-        );
-      if (options.order === "random") queue = shuffle(queue);
-      if (options.count) queue = queue.slice(0, Number(options.count));
-      if (!queue.length) return;
-      const session = {
-        id: crypto.randomUUID(),
-        started: Date.now(),
-        direction: options.direction,
-        attempts: [],
-      };
-      if (
-        !(await commit((s) => {
-          s.sessions.push(session);
-          s.settings = { ...config, studyOptions: { ...options } };
-        }))
-      )
-        return;
-      study = {
-        queue,
-        index: 0,
-        sessionId: session.id,
-        direction: options.direction,
-        config,
-        phase: "question",
-        elapsed: 0,
-        lastTick: performance.now(),
-        paused: false,
-        hints: 0,
-        answer: "",
-        inputMode: config.answerMode,
-        drawing: emptyDrawing(),
-        retried: false,
-      };
-      location.hash = "learn";
+      });
     } catch (e) {
       notify(e.message);
     }
   };
+}
+async function startStudy(queue, config) {
+  validateSettings(config);
+  if (
+    config.answerMode === "choice" &&
+    queue.some(
+      (item) =>
+        !choiceAnswers(item, state.items, options.direction, config).length,
+    )
+  )
+    throw Error(
+      "4択には同じ種類の異なる正解が4件以上必要です。問題を追加するか、別の回答方法を選んでください。",
+    );
+  if (options.order === "random") queue = shuffle(queue);
+  if (options.count) queue = queue.slice(0, Number(options.count));
+  if (!queue.length)
+    throw Error("出題できる問題がありません。範囲・方法を選び直してください。");
+  const session = {
+    id: crypto.randomUUID(),
+    started: Date.now(),
+    direction: options.direction,
+    attempts: [],
+  };
+  if (
+    !(await commit((s) => {
+      s.sessions.push(session);
+      s.settings = { ...config, studyOptions: { ...options } };
+    }))
+  )
+    return;
+  study = {
+    queue,
+    index: 0,
+    sessionId: session.id,
+    direction: options.direction,
+    config,
+    phase: "question",
+    elapsed: 0,
+    lastTick: performance.now(),
+    paused: false,
+    hints: 0,
+    answer: "",
+    inputMode: config.answerMode,
+    drawing: emptyDrawing(),
+    retried: false,
+  };
+  location.hash = "learn";
 }
 async function daily() {
   if (study) {
@@ -606,7 +627,7 @@ function answerFormHTML() {
       <canvas id="handwriting-answer" class="handwriting-canvas" aria-label="手書きの回答欄" aria-describedby="handwriting-help" aria-disabled="${study.paused}">手書きに対応していない場合はキーボードへ切り替えてください。</canvas>
       <p id="ink-status" class="ink-status" role="status" aria-live="polite"></p>
     </div>`
-        : `${study.inputMode === "scribble" ? '<p class="scribble-help">Apple Pencilで下の入力欄に書いてください。iPadOSのスクリブルで文字に変換後、「回答を確認」で採点します。変換した文字は修正できます。</p>' : ""}${typedAnswerHTML(disabled)}`
+        : `${study.inputMode === "scribble" ? '<p class="scribble-help">Apple Pencilで下の入力欄に書いてください。文字に変換後、「回答を確認」で採点します。</p>' : ""}${typedAnswerHTML(disabled)}`
     }
     <div class="row"><button class="primary" ${disabled}>回答を確認</button><button type="button" id="skip" ${disabled}>スキップ</button></div>
   </form>`;
@@ -649,7 +670,7 @@ function learn() {
   }
   const item = current(),
     prompt = study.direction === "en-ja" ? item.en : item.ja;
-  app.innerHTML = `<div class="learning">${title(study.dailyDate ? "今日の10問" : "学習", `${study.index + 1} / ${study.queue.length} 問 · ${type(item)} ${item.number} · セクション ${item.section} · ${study.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"}`)}<div class="row between"><span id="timer" aria-live="off"></span><button id="pause">${study.paused ? "再開" : "一時停止"}</button></div><p id="paused" ${study.paused ? "" : "hidden"}>一時停止中です。タイマーは進みません。</p><section class="card learning-card"><p class="prompt">${esc(prompt)}</p><p class="hint" id="hint"></p>${study.phase === "question" ? answerFormHTML() : evaluation()}</section><p class="muted">${study.retried ? "再挑戦中：前の間違いの記録は残ります。" : study.inputMode === "handwriting" ? "筆跡は文字に変換せず、正解と見比べて自己採点します。" : "文字回答は一致率で自動評価。言い換えは自己判定で変更できます。"}</p><button id="finish" class="danger">ここで終了して結果を見る</button></div>`;
+  app.innerHTML = `<div class="learning">${title(study.dailyDate ? "今日の10問" : "学習", `${study.index + 1} / ${study.queue.length} 問 · ${type(item)} ${item.number} · セクション ${item.section} · ${study.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"}`)}<div class="row between"><span id="timer" aria-live="off"></span><button id="pause">${study.paused ? "再開" : "一時停止"}</button></div><p id="paused" ${study.paused ? "" : "hidden"}>一時停止中です。タイマーは進みません。</p><section class="card learning-card"><p class="prompt">${esc(prompt)}</p><p class="hint" id="hint"></p>${study.phase === "question" ? answerFormHTML() : evaluation()}</section>${study.retried || study.inputMode === "handwriting" ? `<p class="muted">${study.retried ? "再挑戦中：前の間違いの記録は残ります。" : "正解と見比べて自己採点してください。"}</p>` : ""}<button id="finish" class="danger">ここで終了して結果を見る</button></div>`;
   $("#pause").onclick = () => {
     captureAnswer();
     if (!study.paused) advanceClock();
@@ -975,7 +996,24 @@ function result() {
 }
 function sessionHTML(s) {
   const a = s.attempts;
-  return `<section class="card"><h2>${fmt(s.started)}</h2><p>${s.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"} · ${a.length} 回答 · ${new Set(a.map(identity)).size} 問 · ${s.ended ? "終了" : "途中終了／進行中"}</p><p>正解 ${a.filter((x) => x.correctness === "correct").length} / 不正解 ${a.filter((x) => x.correctness === "incorrect").length} / 保留 ${a.filter((x) => x.correctness === "unknown").length} / スキップ ${a.filter((x) => x.correctness === "skip").length} / 時間切れ ${a.filter((x) => x.correctness === "timeout").length}</p>${a.map((x) => `<details><summary>${type(x)} ${x.number} · ${ratings[x.rating]} · ${{ correct: "正解", incorrect: "不正解", unknown: "保留", skip: "スキップ", timeout: "時間切れ" }[x.correctness]} ${x.retry ? "（再挑戦）" : ""}</summary><p>${fmt(x.at)} · セクション ${x.section} · ヒント ${x.hints} ${x.hintUnit === "word" ? "語" : "文字"}</p><p>問題: ${esc(x.prompt)}</p>${x.inputMode === "handwriting" ? `<p>回答：手書き</p>${drawingHTML(x.drawing, "保存した手書き回答")}` : `<p>回答: ${esc(x.answer || "（未回答）")}</p>`}<p>正解: ${esc(x.correctAnswer)}</p></details>`).join("")}</section>`;
+  return `<section class="card"><h2>${fmt(s.started)}</h2><p>${s.direction === "en-ja" ? "英語 → 日本語" : "日本語 → 英語"} · ${a.length} 回答${s.ended ? "" : " · 途中"}</p>${outcomeSummary(a)}${a.map((x) => `<details><summary>${type(x)} ${x.number} · ${ratings[x.rating]} · ${{ correct: "正解", incorrect: "不正解", unknown: "保留", skip: "スキップ", timeout: "時間切れ" }[x.correctness]} ${x.retry ? "（再挑戦）" : ""}</summary><p>${fmt(x.at)} · セクション ${x.section} · ヒント ${x.hints} ${x.hintUnit === "word" ? "語" : "文字"}</p><p>問題: ${esc(x.prompt)}</p>${x.inputMode === "handwriting" ? `<p>回答：手書き</p>${drawingHTML(x.drawing, "保存した手書き回答")}` : `<p>回答: ${esc(x.answer || "（未回答）")}</p>`}<p>正解: ${esc(x.correctAnswer)}</p></details>`).join("")}</section>`;
+}
+function outcomeSummary(attempts) {
+  if (!attempts.length) return '<p class="muted">回答はまだありません。</p>';
+  const entries = [
+    ["correct", "正解", "#148977"],
+    ["incorrect", "不正解", "#bb4d64"],
+    ["unknown", "保留", "#668fc2"],
+    ["skip", "スキップ", "#7a8797"],
+    ["timeout", "時間切れ", "#ca824b"],
+  ]
+    .map(([key, label, color]) => ({
+      label,
+      color,
+      count: attempts.filter((a) => a.correctness === key).length,
+    }))
+    .filter((e) => e.count);
+  return `<div class="outcome-summary"><div class="bar" role="img" aria-label="${entries.map((e) => `${e.label} ${e.count}`).join(" / ")}">${entries.map((e) => `<span style="width:${(e.count / attempts.length) * 100}%;background:${e.color}"></span>`).join("")}</div><ul class="chart-legend">${entries.map((e) => `<li><i style="background:${e.color}" aria-hidden="true"></i>${e.label}<strong>${e.count}</strong></li>`).join("")}</ul></div>`;
 }
 function pickRange() {
   if (!rangeDraft) {
@@ -996,11 +1034,9 @@ function pickRange() {
 }
 function selectionRow(i) {
   const id = identity(i);
-  return `<label class="list-item range-item${rangeDraft.has(id) ? " selected" : ""}"><input type="checkbox" data-pick-id="${id}" aria-label="${type(i)} ${i.number}を選択" ${rangeDraft.has(id) ? "checked" : ""}><span class="item-body"><span class="item-number">${type(i)}${String(i.number).padStart(3, "0")}</span><span class="item-en">${esc(i.en)}</span><span class="item-ja">${esc(i.ja)}</span><span class="item-meta">セクション ${i.section}</span></span></label>`;
+  return `<label class="list-item range-item${rangeDraft.has(id) ? " selected" : ""}"><input type="checkbox" data-pick-id="${id}" aria-label="${type(i)} ${i.number}を選択" ${rangeDraft.has(id) ? "checked" : ""}><span class="item-body"><span class="item-number">${type(i)}${String(i.number).padStart(3, "0")}</span><span class="item-en">${esc(i.en)}</span><span class="item-ja">${esc(i.ja)}</span></span></label>`;
 }
 function search(requestedSection, picking = false) {
-  meterController?.destroy();
-  meterController = null;
   document.body.classList.add("browse-view");
   const view = picking ? rangeBrowse : browse;
   if (requestedSection !== undefined) {
@@ -1020,19 +1056,14 @@ function search(requestedSection, picking = false) {
     view.query = "";
   }
   app.innerHTML =
-    title(
-      picking ? "学習範囲を選択" : "検索・一覧",
-      picking
-        ? "チェックで選択。検索やセクションを変えても選択は残ります。"
-        : "1セクションずつ、左右にめくって探せます。",
-    ) +
+    title(picking ? "学習範囲を選択" : "検索・一覧", picking ? "" : "") +
     (picking
       ? `<div class="range-toolbar card"><span id="selection-count" role="status" aria-live="polite"></span><div class="row"><button id="confirm-range" class="primary">選択を確定</button><button id="cancel-range">キャンセル</button></div><button id="clear-selection">選択を全解除</button></div>`
       : "") +
-    `<div class="browse-modes" role="group" aria-label="表示モード"><button class="browse-mode" data-mode="sentence" aria-pressed="${view.kind === "sentence"}">例文モード</button><button class="browse-mode" data-mode="word" aria-pressed="${view.kind === "word"}">単語モード</button></div><div class="search-tools card"><label>番号・英語・日本語<input id="query" type="search" placeholder="選んだモードの全セクションから検索" value="${esc(view.query)}"></label></div><p class="search-summary" role="status" aria-live="polite"></p><section class="section-browser card" aria-label="セクションごとの一覧"><div class="section-controls"><button id="section-previous" aria-label="前のセクション">← 前へ</button><span class="section-position" aria-label="セクションの位置"></span><button id="section-next" aria-label="次のセクション">次へ →</button></div><div class="section-tabs" role="group" aria-label="セクションを選択"></div><p class="section-hint muted">${picking ? "セクションやモードを切り替えて、学ぶ問題にチェックしてください。" : "一覧を左右にスワイプするとセクションが変わります。"}</p>${picking ? '<div class="row range-bulk"><button id="select-visible">表示中を全選択</button><button id="deselect-visible">表示中を解除</button></div>' : ""}<div id="list"></div></section>`;
+    `<div class="browse-modes" role="group" aria-label="表示モード"><button class="browse-mode" data-mode="sentence" aria-pressed="${view.kind === "sentence"}">例文モード</button><button class="browse-mode" data-mode="word" aria-pressed="${view.kind === "word"}">単語モード</button></div><div class="search-tools card"><label>番号・英語・日本語<input id="query" type="search" placeholder="検索" value="${esc(view.query)}"></label></div><p class="search-summary" role="status" aria-live="polite"></p><section class="section-browser card" aria-label="セクションごとの一覧"><div class="section-controls"><button id="section-previous" aria-label="前のセクション">← 前へ</button><span class="section-position" aria-label="セクションの位置"></span><button id="section-next" aria-label="次のセクション">次へ →</button></div><div class="section-tabs" role="group" aria-label="セクションを選択"></div>${picking ? '<div class="row range-bulk"><button id="select-visible">表示中を全選択</button><button id="deselect-visible">表示中を解除</button></div>' : ""}<div id="list"></div></section>`;
   app.insertAdjacentHTML(
     "afterbegin",
-    `<aside class="browse-meter" data-no-swipe><span aria-hidden="true">小</span><div class="glass-meter"><input type="range" id="browse-position" aria-label="セクション・番号へ移動" min="0" max="0" value="0"></div><span aria-hidden="true">大</span><output id="browse-position-label" for="browse-position"></output></aside>`,
+    `<aside class="browse-meter" data-no-swipe><span aria-hidden="true">小</span><input type="range" id="browse-position" aria-label="セクション・番号へ移動" min="0" max="0" value="0"><span aria-hidden="true">大</span><output id="browse-position-label" for="browse-position"></output></aside>`,
   );
   let sections = [];
   const move = (step) => {
@@ -1080,15 +1111,16 @@ function search(requestedSection, picking = false) {
           String(button.dataset.mode === view.kind),
         ),
       );
-    $(".search-summary").textContent =
-      `検索結果 ${matches.length} 件 / 登録済み ${registered.length} 件`;
+    $(".search-summary").textContent = q
+      ? `${matches.length} / ${registered.length} 件`
+      : `${registered.length} 件`;
     $(".section-position").textContent = `${index + 1} / ${sections.length}`;
     $("#section-previous").disabled = index <= 0;
     $("#section-next").disabled = index < 0 || index >= sections.length - 1;
     $(".section-tabs").innerHTML = sections
       .map(
         (n) =>
-          `<button data-section="${n}" aria-label="セクション ${n}"${n === view.section ? ' aria-current="true"' : ""}>SECTION ${String(n).padStart(2, "0")}</button>`,
+          `<button data-section="${n}" aria-label="セクション ${n}"${n === view.section ? ' aria-current="true"' : ""}>${n}</button>`,
       )
       .join("");
     app.querySelectorAll("[data-section]").forEach((button) => {
@@ -1168,7 +1200,6 @@ function search(requestedSection, picking = false) {
     meter.max = Math.max(0, ordered.length - 1);
     meter.value = position;
     meter.disabled = !ordered.length;
-    meterController?.sync();
     const item = ordered[position];
     $("#browse-position-label").textContent = item
       ? `§${item.section} / ${item.number}`
@@ -1239,17 +1270,14 @@ function search(requestedSection, picking = false) {
     };
   }
   update();
-  meterController = mountGlassMeter($("#browse-position"));
-  meterController.sync();
 }
 function itemLink(i) {
   const metadata = [
-    `セクション ${i.section}`,
     i.kind === "word" ? i.partOfSpeech : "",
     i.favorite ? "★ お気に入り" : "",
     i.review ? "要復習" : "",
   ].filter(Boolean);
-  return `<a class="list-item" href="#detail/${i.kind}/${i.number}"><span class="item-number">${type(i)}${String(i.number).padStart(3, "0")}</span><span class="item-body"><span class="item-en">${esc(i.en)}</span><span class="item-ja">${esc(i.ja)}</span><span class="item-meta">${esc(metadata.join(" · "))}</span></span><span class="item-chevron" aria-hidden="true">›</span></a>`;
+  return `<a class="list-item" href="#detail/${i.kind}/${i.number}"><span class="item-number">${type(i)}${String(i.number).padStart(3, "0")}</span><span class="item-body"><span class="item-en">${esc(i.en)}</span><span class="item-ja">${esc(i.ja)}</span>${metadata.length ? `<span class="item-meta">${esc(metadata.join(" · "))}</span>` : ""}</span><span class="item-chevron" aria-hidden="true">›</span></a>`;
 }
 function section(n) {
   search(n);
@@ -1282,10 +1310,7 @@ function detail(kind, number) {
   };
   activeNavigation = { previous: () => move(-1), next: () => move(1) };
   app.innerHTML =
-    title(
-      `${type(item)} ${item.number}`,
-      `セクション ${item.section} · 左右にスワイプして前後の${type(item)}へ`,
-    ) +
+    title(`${type(item)} ${item.number}`, `セクション ${item.section}`) +
     `<div class="detail-navigation"><button id="detail-previous" aria-label="前の${type(item)}" ${index === 0 ? "disabled" : ""}>← 前へ</button><span id="detail-position" class="section-position">${index + 1} / ${items.length}</span><button id="detail-next" aria-label="次の${type(item)}" ${index === items.length - 1 ? "disabled" : ""}>次へ →</button></div><section class="card focus-card" data-swipe-surface aria-label="${type(item)} ${item.number}の詳細"><p class="prompt">${esc(item.en)}</p><p>${esc(item.ja)}</p><dl>${[
       ["別解（英語）", item.aliasesEn.join(" / ")],
       ["別解（日本語）", item.aliasesJa.join(" / ")],
@@ -1304,7 +1329,7 @@ function detail(kind, number) {
       .map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`)
       .join(
         "",
-      )}</dl><small>番号のない関連表現は詳細表示のみで出題しません。</small><div class="row"><button id="favorite">${item.favorite ? "★ お気に入り解除" : "☆ お気に入り"}</button><button id="review">${item.review ? "要復習を解除" : "要復習にする"}</button>${link(`edit/${kind}/${number}`, "編集")}</div></section><div class="grid">${[
+      )}</dl><div class="row"><button id="favorite">${item.favorite ? "★ お気に入り解除" : "☆ お気に入り"}</button><button id="review">${item.review ? "要復習を解除" : "要復習にする"}</button>${link(`edit/${kind}/${number}`, "編集")}</div></section><div class="grid">${[
       "en-ja",
       "ja-en",
     ]
@@ -1352,10 +1377,7 @@ function edit(kind, number) {
       related: [],
     };
   app.innerHTML =
-    title(
-      existing ? "問題を編集" : "問題を登録",
-      "写真・本の内容を確認して入力してください。OCRは未実装です。",
-    ) +
+    title(existing ? "問題を編集" : "問題を登録", "") +
     `<form id="edit-form"><div class="grid"><label>種類<select name="kind" ${existing ? "disabled" : ""}><option value="sentence" ${item.kind === "sentence" ? "selected" : ""}>例文</option><option value="word" ${item.kind === "word" ? "selected" : ""}>単語・熟語</option></select></label><label>番号<input name="number" type="number" min="1" required value="${item.number}" ${existing ? "readonly" : ""}></label><label>セクション<input name="section" type="number" min="1" required value="${item.section}"></label></div>${[
       ["en", "英語"],
       ["ja", "主要な日本語の意味・訳"],
@@ -1423,10 +1445,7 @@ function progress() {
   );
   const total = records.length || 1;
   app.innerHTML =
-    title(
-      "履歴・進捗",
-      "学習量は回答回数。再挑戦も含みます。評価は出題方向別の最新評価です。",
-    ) +
+    title("履歴・進捗") +
     `<section class="card"><h2>直近7日の学習量</h2>${Array.from(
       { length: 7 },
       (_, i) => {
@@ -1447,7 +1466,7 @@ function progress() {
       },
     ).join(
       "",
-    )}</section><section class="card"><h2>3段階評価の割合</h2><div class="bar" role="img" aria-label="${ratings.map((r, i) => r + " " + counts[i] + "件").join("、")}">${counts.map((n, i) => `<span style="width:${(n / total) * 100}%;background:${["#c56e7c", "#81a8da", "#3678e9"][i]}"></span>`).join("")}</div><p>${ratings.map((r, i) => `${r} ${counts[i]}件（${Math.round((counts[i] / total) * 100)}%）`).join(" / ")}</p></section><div class="grid">${[
+    )}</section><section class="card"><h2>習得状況</h2><div class="bar" role="img" aria-label="${ratings.map((r, i) => r + " " + counts[i] + "件").join("、")}">${counts.map((n, i) => `<span style="width:${(n / total) * 100}%;background:${["#c56e7c", "#81a8da", "#3678e9"][i]}"></span>`).join("")}</div><ul class="chart-legend">${ratings.map((r, i) => `<li title="${Math.round((counts[i] / total) * 100)}%"><i style="background:${["#c56e7c", "#81a8da", "#3678e9"][i]}" aria-hidden="true"></i>${r}<strong>${counts[i]}</strong></li>`).join("")}</ul><details class="compact-help"><summary>集計の見方</summary><p>回答回数は再挑戦を含みます。習得状況は出題方向別の最新評価です。</p></details></section><div class="grid">${[
       "sentence",
       "word",
     ]
@@ -1472,7 +1491,7 @@ function progress() {
                     )
                     .filter(Boolean),
                   learned = rs.filter((r) => r.rating === 2).length;
-                return `<p><a href="#section/${section}">セクション ${section}</a> · 覚えた ${learned}/${items.length * 2} 方向別問題 · 学習済み ${rs.length}</p><progress max="${items.length * 2}" value="${learned}"></progress>`;
+                return `<div class="section-progress"><div class="row between"><a href="#section/${section}">セクション ${section}</a><span>覚えた ${learned}/${items.length * 2}</span></div><progress aria-label="セクション${section}・覚えた${learned}/${items.length * 2}・学習済み${rs.length}" max="${items.length * 2}" value="${learned}"></progress></div>`;
               })
               .join("") || "<p>未登録</p>"
           }</section>`,
@@ -1484,11 +1503,8 @@ function progress() {
 }
 function data() {
   app.innerHTML =
-    title(
-      "データ管理",
-      "問題と記録はこの端末に保存されます。教材データは含まれていません。",
-    ) +
-    `<section class="card"><h2>登録・編集</h2><p>${state.items.length} 件登録済み</p><div class="row">${link("edit", "1件ずつ登録", true)}${link("search", "検索して編集")}<button id="demo">開発用の架空データを追加</button></div><p class="muted">架空データは4件です。DUO教材の例文・訳・単語ではありません。既存番号と重複するデータは追加しません。</p></section><section class="card"><h2>教材JSONの手動インポート</h2><p>青文字の見出しと主要な訳をそのまま登録します。例文の活用形には変換しません。関連語は出題数に含めません。CSV・個別編集は旧データの互換用です。</p><label>登録方法<select id="import-mode"><option value="add">追加（同じ番号があれば中止）</option><option value="update">追加・更新（同じ番号の教材だけ更新）</option></select></label><label>ファイル<input id="import-file" type="file" accept=".json,.csv,application/json,text/csv"></label><label>または貼り付け<textarea id="import-text" placeholder='[{"kind":"word","number":1,"section":1,"en":"...","ja":"..."}]'></textarea></label><label>形式<select id="import-format"><option value="json">JSON</option><option value="csv">CSV</option></select></label><button id="preview-import">取り込み前に確認</button></section><section class="card"><h2>全データバックアップ・復元</h2><button id="export">JSONバックアップを保存</button><p class="muted">問題・方向別復習記録・回答履歴・設定を含みます。</p><label>バックアップを選択<input id="backup-file" type="file" accept=".json,application/json"></label><label>復元方法<select id="restore-mode"><option value="merge">追加統合（既存問題・設定を優先）</option><option value="replace">既存データを消して完全復元</option></select></label><label>またはバックアップJSONを貼り付け<textarea id="backup-text"></textarea></label><button id="preview-backup">復元前に確認</button><p class="muted">復元を確定すると途中の学習は終了します。統合では同じ履歴IDを重複させず、復習記録は更新日時が新しいものを採用します。同じ番号の問題は既存内容を保持します。</p></section><div id="preview"></div>${help()}`;
+    title("データ管理") +
+    `<section class="card"><h2>登録・編集</h2><p>${state.items.length} 件登録済み</p><div class="row">${link("edit", "1件ずつ登録", true)}${link("search", "検索して編集")}<button id="demo">開発用の架空データを追加</button></div><p class="muted">サンプルは教材の内容を含みません。</p></section><section class="card"><h2>教材JSONの手動インポート</h2><ol class="flow-steps" aria-label="インポートの流れ"><li>ファイルを選ぶ</li><li>内容を確認</li><li>登録する</li></ol><details class="compact-help"><summary>登録ルール</summary><p>青文字の見出しと主要な訳をそのまま登録。関連語は出題対象外です。CSV・個別編集も利用できます。</p></details><label>登録方法<select id="import-mode"><option value="add">追加（同じ番号があれば中止）</option><option value="update">追加・更新（同じ番号の教材だけ更新）</option></select></label><label>ファイル<input id="import-file" type="file" accept=".json,.csv,application/json,text/csv"></label><label>または貼り付け<textarea id="import-text" placeholder='[{"kind":"word","number":1,"section":1,"en":"...","ja":"..."}]'></textarea></label><label>形式<select id="import-format"><option value="json">JSON</option><option value="csv">CSV</option></select></label><button id="preview-import">取り込み前に確認</button></section><section class="card"><h2>全データバックアップ・復元</h2><button id="export">JSONバックアップを保存</button><p class="muted">教材・履歴・設定をまとめて保存します。</p><label>バックアップを選択<input id="backup-file" type="file" accept=".json,application/json"></label><label>復元方法<select id="restore-mode"><option value="merge">追加統合（既存問題・設定を優先）</option><option value="replace">既存データを消して完全復元</option></select></label><label>またはバックアップJSONを貼り付け<textarea id="backup-text"></textarea></label><button id="preview-backup">復元前に確認</button><details class="compact-help"><summary>復元時の注意</summary><p>復元すると途中の学習は終了します。追加統合では既存の問題・設定を優先し、履歴の重複を防ぎます。復習記録は新しい更新を採用します。</p></details></section><div id="preview"></div>${help()}`;
   $("#demo").onclick = async () => {
     if (
       await commit((s) => {
@@ -1643,8 +1659,8 @@ function showPreview() {
 function settings() {
   const s = state.settings;
   app.innerHTML =
-    title("設定", "時間設定は次の学習から反映されます。") +
-    `<section class="card version-card" aria-labelledby="version-heading"><div><h2 id="version-heading">現在表示中のバージョン</h2><p class="muted">現在表示しているバージョンです。</p></div><strong class="version-number">v${esc(appVersion)}</strong><a class="button" href="${refreshURL()}" data-refresh-app>最新版を開く</a><p class="muted">オンラインで最新版を開きます。保存済みの学習データは保持されます。</p></section><form id="settings-form"><section class="card"><label>1日の学習目標（回答数）<input name="goal" type="number" min="1" max="1000" value="${s.goal}" required></label>${timingFields(s)}</section><section class="card"><h2>英語回答の表記ゆれ</h2>${[
+    title("設定") +
+    `<section class="card version-card" aria-labelledby="version-heading"><div><h2 id="version-heading">現在表示中のバージョン</h2></div><strong class="version-number">v${esc(appVersion)}</strong><a class="button" href="${refreshURL()}" data-refresh-app>最新版を開く</a></section><form id="settings-form"><section class="card"><label>1日の学習目標（回答数）<input name="goal" type="number" min="1" max="1000" value="${s.goal}" required></label>${timingFields(s)}</section><section class="card"><h2>英語回答の表記ゆれ</h2>${[
       ["ignoreCase", "大小文字を区別しない"],
       ["ignoreSpaces", "余分な空白をまとめる"],
       ["ignorePunctuation", "句読点を無視する"],
@@ -1655,7 +1671,7 @@ function settings() {
       )
       .join(
         "",
-      )}<p class="muted">全角英数字は半角に正規化し、前後の空白は常に除きます。言い換えの意味判定は行いません。</p></section><section class="card"><h2>復習間隔（日）</h2><div class="grid">${ratings.map((r, i) => `<label>${r}<input name="interval${i}" type="number" min="1" max="365" value="${s.intervals[i]}" required></label>`).join("")}</div><p class="muted">「覚えた」は連続評価回数に応じて最大8倍まで延長します。変更は次の評価から反映し、過去の復習予定は保持します。</p></section><button class="primary">設定を保存</button></form><section class="card"><h2>端末ストレージ</h2><p id="storage-estimate">確認中…</p><button id="persist">永続保存をリクエスト</button><p class="muted">Safari・OSによって永続保存は許可されない場合があります。バックアップを続けてください。複数のDUO画面を同時に編集しないでください。</p></section>${help()}`;
+      )}<details class="compact-help"><summary>判定の補足</summary><p>全角英数字・前後の空白は自動調整。意味が同じ別の表現は自己採点で調整できます。</p></details></section><section class="card"><h2>復習間隔（日）</h2><div class="grid">${ratings.map((r, i) => `<label>${r}<input name="interval${i}" type="number" min="1" max="365" value="${s.intervals[i]}" required></label>`).join("")}</div><details class="compact-help"><summary>復習間隔について</summary><p>「覚えた」が続くと最大8倍に延長。設定変更は次の評価から反映します。</p></details></section><button class="primary">設定を保存</button></form><section class="card"><h2>端末ストレージ</h2><p id="storage-estimate">確認中…</p><button id="persist">永続保存をリクエスト</button><p class="muted">バックアップは定期的に保存してください。</p></section>${help()}`;
   $("#settings-form").onsubmit = async (e) => {
     e.preventDefault();
     try {
@@ -1707,8 +1723,6 @@ function settings() {
 }
 function render() {
   if (!state) return;
-  meterController?.destroy();
-  meterController = null;
   closeMenu();
   document.body.classList.remove("browse-view");
   if (document.querySelector("#notice").dataset.tone === "success") notify("");
@@ -1794,8 +1808,15 @@ function updateNotice(message) {
 }
 let offlineReady = false;
 function connection() {
-  document.querySelector("#connection").textContent =
-    `${navigator.onLine ? "オンライン" : "オフライン"} · ${offlineReady ? "オフライン準備完了" : "オフライン準備前"}`;
+  const el = document.querySelector("#connection");
+  const description = `${navigator.onLine ? "オンライン" : "オフライン"} · ${offlineReady ? "オフライン準備完了" : "準備中"}`;
+  el.textContent = !navigator.onLine
+    ? "オフライン"
+    : offlineReady
+      ? "オフライン準備完了"
+      : "準備中";
+  el.setAttribute("aria-label", description);
+  el.title = description;
 }
 window.addEventListener("online", connection);
 window.addEventListener("offline", connection);

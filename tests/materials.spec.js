@@ -48,7 +48,11 @@ test("教材JSONをファイルで登録・更新し関連語を検索、履歴�
   await upload();
   await expect(page.getByText("2 件登録済み")).toBeVisible();
   await page.goto("/#result");
-  await expect(page.locator("main")).toContainText("スキップ 1");
+  await expect(
+    page.getByRole("img", { name: "スキップ 1", exact: true }),
+  ).toBeVisible();
   await page.reload();
-  await expect(page.locator("main")).toContainText("スキップ 1");
+  await expect(
+    page.getByRole("img", { name: "スキップ 1", exact: true }),
+  ).toBeVisible();
 });

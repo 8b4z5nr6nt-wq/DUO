@@ -98,7 +98,7 @@ try {
   await page.getByRole("heading", { name: "学習結果" }).waitFor();
   await page.reload();
   await page.getByRole("heading", { name: "学習結果" }).waitFor();
-  assert.match(await page.locator("main").textContent(), /正解 1/);
+  await page.getByRole("img", { name: "正解 1", exact: true }).waitFor();
   assert.deepEqual(errors, []);
   console.log(
     "PASS: /DUO/ assets, manifest scope, Service Worker, offline reload/search/study/history persistence",

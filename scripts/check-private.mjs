@@ -196,7 +196,7 @@ try {
   assert.equal(refreshed.status(), 200);
   assert.equal(new URL(page.url()).origin, origin);
   assert.ok(new URL(page.url()).searchParams.get("duo-update"));
-  await page.getByRole("heading", { name: "今日の一歩を。" }).waitFor();
+  await page.getByRole("heading", { name: "ホーム" }).waitFor();
   await page.waitForFunction(() =>
     document
       .querySelector("#connection")
@@ -235,7 +235,7 @@ try {
   await page.getByRole("heading", { name: "学習結果" }).waitFor();
   await page.reload();
   await page.getByRole("heading", { name: "学習結果" }).waitFor();
-  assert.match(await page.locator("main").textContent(), /正解 1/);
+  await page.getByRole("img", { name: "正解 1", exact: true }).waitFor();
   // OAuth endpoints must always reach the network, never fall back to a cached app shell.
   assert.equal(
     await page.evaluate(() =>
@@ -260,7 +260,7 @@ try {
   await owner.setOffline(true);
   await page.reload();
   await page.getByRole("heading", { name: "学習結果" }).waitFor();
-  assert.match(await page.locator("main").textContent(), /正解 1/);
+  await page.getByRole("img", { name: "正解 1", exact: true }).waitFor();
   assert.deepEqual(errors, []);
   console.log(
     "PASS: local Worker rejects anonymous assets, refreshes owner sessions, surfaces expired auth online, preserves offline study/history, keeps OAuth network-only",
