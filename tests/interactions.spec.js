@@ -93,7 +93,7 @@ async function swipe(page, side) {
 test("メニューは閉じている間項目を隠し、Escと選択で閉じ、今日の10問の空状態を表示", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#home");
   await expect(
     page.getByRole("link", { name: "ホーム", exact: true }),
   ).toBeHidden();

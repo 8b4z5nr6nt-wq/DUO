@@ -12,10 +12,7 @@
       name="apple-mobile-web-app-status-bar-style"
       content="black-translucent"
     />
-    <meta
-      name="description"
-      content="端末の中だけで学ぶ、個人用英語学習アプリ"
-    />
+    <meta name="description" content="端末の中だけで学ぶ、個人用学習アプリ" />
     <link
       rel="icon"
       href="https://8b4z5nr6nt-wq.github.io/DUO/icons/home-ccb71bd4a66e-192.png"
@@ -77,10 +74,16 @@
         閉じる ×
       </button>
       <nav aria-label="メイン">
-        <a href="#home">ホーム</a><a href="#setup">学習</a
-        ><a href="#daily">今日の10問</a><a href="#search">検索</a
-        ><a href="#progress">記録</a><a href="#data">データ</a
-        ><a href="#settings">設定</a>
+        <a href="#subjects">科目を選ぶ</a>
+        <a data-english-nav href="#home">ホーム</a>
+        <a data-english-nav href="#setup">学習</a>
+        <a data-english-nav href="#daily">今日の10問</a>
+        <a data-english-nav href="#search">検索</a>
+        <a data-english-nav href="#progress">記録</a>
+        <a data-english-nav href="#data">データ</a>
+        <a data-english-nav href="#settings">設定</a>
+        <a data-subject-home hidden>科目のホーム</a>
+        <a data-subject-data hidden>JSONを取り込む</a>
       </nav>
     </dialog>
     <script type="module" src="/src/app.js"></script>

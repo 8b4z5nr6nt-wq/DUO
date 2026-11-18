@@ -196,7 +196,7 @@ try {
   assert.equal(refreshed.status(), 200);
   assert.equal(new URL(page.url()).origin, origin);
   assert.ok(new URL(page.url()).searchParams.get("duo-update"));
-  await page.getByRole("heading", { name: "ホーム" }).waitFor();
+  await page.getByRole("heading", { name: "科目を選ぶ" }).waitFor();
   await page.waitForFunction(() =>
     document
       .querySelector("#connection")

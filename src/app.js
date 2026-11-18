@@ -5,6 +5,7 @@ import {
   cardWordSegments,
 } from "./study-tools.js";
 import { installMenu, closeMenu } from "./menu.js";
+import { createSubjectScreens, subjectPicker } from "./subject-cards.js";
 import {
   quizSchedule,
   examSchedule,
@@ -14,7 +15,7 @@ import {
 } from "./schedule.js";
 import { prepareImport, applyImport } from "./materials.js";
 import "./style.css";
-import { installSwipeNavigation, classifySwipe } from "./swipe.js";
+import { installSwipeNavigation, bindCardSwipe } from "./swipe.js";
 import { emptyDrawing, hasInk, mountHandwriting } from "./handwriting.js";
 import {
   defaults,
@@ -495,75 +496,7 @@ function learnCard() {
     },
   };
   const card = $(".swipe-card");
-  let pointer = null,
-    suppressClick = false;
-  card.onpointerdown = (event) => {
-    if (pointer) {
-      pointer = null;
-      card.style.transform = "";
-      return;
-    }
-    if (
-      !revealed ||
-      study.paused ||
-      busy ||
-      event.button !== 0 ||
-      event.isPrimary === false
-    )
-      return;
-    pointer = {
-      id: event.pointerId,
-      // Screen coordinates stay stable when the viewport scrolls during a touch.
-      x: event.screenX,
-      y: event.screenY,
-      at: event.timeStamp,
-    };
-  };
-  card.onpointermove = (event) => {
-    if (!pointer || pointer.id !== event.pointerId) return;
-    const dx = event.screenX - pointer.x,
-      dy = event.screenY - pointer.y;
-    if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) {
-      pointer = null;
-      card.style.transform = "";
-      return;
-    }
-    if (Math.abs(dx) > 12) {
-      try {
-        card.setPointerCapture(event.pointerId);
-      } catch {}
-      card.style.transform = `translateX(${dx}px) rotate(${dx / 35}deg)`;
-    }
-  };
-  card.onpointercancel = () => {
-    pointer = null;
-    card.style.transform = "";
-  };
-  card.onpointerup = (event) => {
-    if (!pointer || pointer.id !== event.pointerId) return;
-    const direction = classifySwipe({
-      dx: event.screenX - pointer.x,
-      dy: event.screenY - pointer.y,
-      duration: event.timeStamp - pointer.at,
-    });
-    pointer = null;
-    card.style.transform = "";
-    if (direction) {
-      suppressClick = true;
-      void rate(direction === "previous" ? 2 : 0);
-    }
-  };
-  card.addEventListener(
-    "click",
-    (event) => {
-      if (suppressClick) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        suppressClick = false;
-      }
-    },
-    true,
-  );
+  bindCardSwipe(card, () => revealed && !study.paused && !busy, rate);
   updateClockUI();
 }
 function timingFields(s) {
@@ -1727,7 +1660,7 @@ function render() {
   document.body.classList.remove("browse-view");
   if (document.querySelector("#notice").dataset.tone === "success") notify("");
   activeNavigation = null;
-  const [route = "home", ...parts] = location.hash.slice(1).split("/");
+  const [route, ...parts] = (location.hash.slice(1) || "subjects").split("/");
   const navRoute = ["detail", "section", "pick-range"].includes(route)
     ? "search"
     : ["learn", "result"].includes(route)
@@ -1737,11 +1670,29 @@ function render() {
   if (route !== "detail") detailNavigationFocus = null;
   if (study && route !== "learn") pauseForLeaving();
   disposeCanvases();
+  const inSubject = route === "subject";
+  const atPicker = route === "subjects";
+  const subjectHasCards = inSubject && ["ja", "history"].includes(parts[0]);
+  document.querySelectorAll("[data-english-nav]").forEach((link) => {
+    link.hidden = inSubject || atPicker;
+  });
+  for (const [selector, suffix] of [
+    ["[data-subject-home]", ""],
+    ["[data-subject-data]", "/data"],
+  ]) {
+    const link = document.querySelector(selector);
+    link.hidden = !subjectHasCards;
+    if (subjectHasCards) link.href = `#subject/${parts[0]}${suffix}`;
+  }
   document
     .querySelectorAll("nav a")
     .forEach((a) => a.classList.toggle("active", a.hash === "#" + navRoute));
   (
     ({
+      subjects: () => {
+        app.innerHTML = subjectPicker();
+      },
+      subject: subjectScreens.render,
       home,
       setup,
       daily,
@@ -1759,6 +1710,7 @@ function render() {
   )(...parts);
   window.scrollTo(0, 0);
 }
+const subjectScreens = createSubjectScreens(app, esc, notify);
 installMenu(pauseForLeaving);
 window.addEventListener("hashchange", render);
 document.addEventListener("keydown", (event) => {
@@ -1788,7 +1740,10 @@ document.addEventListener("keydown", (event) => {
   if (action && activeNavigation[action]()) event.preventDefault();
 });
 document.addEventListener("click", (event) => {
-  if (event.target.closest("[data-refresh-app]") && (study || busy)) {
+  if (
+    event.target.closest("[data-refresh-app]") &&
+    (study || busy || subjectScreens.saving())
+  ) {
     event.preventDefault();
     notify("途中の学習を記録して終了し、保存が完了してから更新してください。");
     return;

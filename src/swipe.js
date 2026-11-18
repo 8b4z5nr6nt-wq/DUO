@@ -206,3 +206,68 @@ export function installSwipeNavigation(
     for (const remove of removers) remove();
   };
 }
+
+export function bindCardSwipe(card, canRate, rate) {
+  let pointer = null,
+    suppressClick = false;
+  card.onpointerdown = (event) => {
+    if (pointer) {
+      pointer = null;
+      card.style.transform = "";
+      return;
+    }
+    if (!canRate() || event.button !== 0 || event.isPrimary === false) return;
+    pointer = {
+      id: event.pointerId,
+      // Screen coordinates stay stable when the viewport scrolls during a touch.
+      x: event.screenX,
+      y: event.screenY,
+      at: event.timeStamp,
+    };
+  };
+  card.onpointermove = (event) => {
+    if (!pointer || pointer.id !== event.pointerId) return;
+    const dx = event.screenX - pointer.x,
+      dy = event.screenY - pointer.y;
+    if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) {
+      pointer = null;
+      card.style.transform = "";
+      return;
+    }
+    if (Math.abs(dx) > 12) {
+      try {
+        card.setPointerCapture(event.pointerId);
+      } catch {}
+      card.style.transform = `translateX(${dx}px) rotate(${dx / 35}deg)`;
+    }
+  };
+  card.onpointercancel = () => {
+    pointer = null;
+    card.style.transform = "";
+  };
+  card.onpointerup = (event) => {
+    if (!pointer || pointer.id !== event.pointerId) return;
+    const direction = classifySwipe({
+      dx: event.screenX - pointer.x,
+      dy: event.screenY - pointer.y,
+      duration: event.timeStamp - pointer.at,
+    });
+    pointer = null;
+    card.style.transform = "";
+    if (direction) {
+      suppressClick = true;
+      void rate(direction === "previous" ? 2 : 0);
+    }
+  };
+  card.addEventListener(
+    "click",
+    (event) => {
+      if (suppressClick) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        suppressClick = false;
+      }
+    },
+    true,
+  );
+}
