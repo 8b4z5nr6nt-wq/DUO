@@ -57,9 +57,9 @@ function readSubjectCards(raw, id) {
 export function subjectPicker() {
   return `<section class="subject-picker"><h1>科目を選ぶ</h1><div class="subject-grid">
     <a class="subject-tile" href="#home"><strong>英</strong><span>英語</span></a>
-    <a class="subject-tile" href="#subject/ja"><strong>国</strong><span>現代文・古文単語</span></a>
+    <a class="subject-tile" data-subject-theme="ja" href="#subject/ja"><strong>国</strong><span>現代文・古文単語</span></a>
     <a class="subject-tile" href="#subject/time"><strong>時</strong><span>準備中</span></a>
-    <a class="subject-tile" href="#subject/history"><strong>歴</strong><span>歴史総合</span></a>
+    <a class="subject-tile" data-subject-theme="history" href="#subject/history"><strong>歴</strong><span>歴史総合</span></a>
   </div></section>`;
 }
 

@@ -1888,3 +1888,62 @@ button {
 .subject-import-sample {
   overflow-wrap: anywhere;
 }
+
+[data-subject-theme="ja"] {
+  --subject-accent: linear-gradient(135deg, #ab2535, #861362);
+  --subject-accent-ink: #fff;
+  --subject-bg: linear-gradient(130deg, #8d202c, #601246 72%, #40113e);
+  --subject-surface: linear-gradient(145deg, #ffe8e7, #f3d3e8);
+  --subject-ink: #482038;
+  --subject-muted: #6b3455;
+}
+[data-subject-theme="history"] {
+  --subject-accent: linear-gradient(135deg, #ff9c3e, #ffe26b);
+  --subject-accent-ink: #452708;
+  --subject-bg: linear-gradient(130deg, #923e11, #854d0d 68%, #624611);
+  --subject-surface: linear-gradient(145deg, #ffead4, #fff0b8);
+  --subject-ink: #482910;
+  --subject-muted: #674018;
+}
+.subject-tile[data-subject-theme] {
+  background:
+    radial-gradient(ellipse at 12% 0%, #ffffff26, transparent 70%),
+    var(--subject-accent);
+  color: var(--subject-accent-ink);
+}
+body[data-subject-theme] {
+  background:
+    radial-gradient(ellipse at 85% 6%, #ffffff0d, transparent 58%),
+    var(--subject-bg);
+  background-attachment: fixed;
+}
+body[data-subject-theme] #app :is(.card, .swipe-card) {
+  --muted: var(--subject-muted);
+  background: var(--subject-surface);
+  color: var(--subject-ink);
+}
+body[data-subject-theme] #app .card .muted {
+  color: var(--subject-muted);
+}
+body[data-subject-theme] #app .primary {
+  background: var(--subject-accent);
+  color: var(--subject-accent-ink);
+}
+body[data-subject-theme] #app :is(button, .button):not(.primary) {
+  background: var(--subject-surface);
+  color: var(--subject-ink);
+}
+@media (prefers-color-scheme: dark) {
+  body[data-subject-theme="ja"] {
+    --subject-bg: linear-gradient(130deg, #531522, #330f2e 75%, #200c21);
+    --subject-surface: linear-gradient(145deg, #592431, #421d3a);
+    --subject-ink: #fff0f5;
+    --subject-muted: #f7cade;
+  }
+  body[data-subject-theme="history"] {
+    --subject-bg: linear-gradient(130deg, #55270e, #42300b 75%, #2b230c);
+    --subject-surface: linear-gradient(145deg, #602e13, #4a3b13);
+    --subject-ink: #fff2d4;
+    --subject-muted: #f8dda8;
+  }
+}

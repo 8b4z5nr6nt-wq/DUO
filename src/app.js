@@ -1673,6 +1673,8 @@ function render() {
   const inSubject = route === "subject";
   const atPicker = route === "subjects";
   const subjectHasCards = inSubject && ["ja", "history"].includes(parts[0]);
+  if (subjectHasCards) document.body.dataset.subjectTheme = parts[0];
+  else delete document.body.dataset.subjectTheme;
   document.querySelectorAll("[data-english-nav]").forEach((link) => {
     link.hidden = inSubject || atPicker;
   });
