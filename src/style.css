@@ -1839,6 +1839,9 @@ button {
 .card-answer {
   touch-action: pan-y pinch-zoom;
 }
+.can-flip .swipe-card {
+  cursor: pointer;
+}
 
 #app-menu nav a[hidden] {
   display: none;
@@ -1922,15 +1925,69 @@ button {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-body[data-subject-theme="history"] #app :is(.history-link, .history-item) {
+body[data-subject-theme="history"] #app .history-link {
   color: var(--subject-ink);
 }
-body[data-subject-theme="history"] .history-item .item-number {
-  background: #ffd680;
-  color: #452708;
+body[data-subject-theme="history"] #app .card.history-search-panel {
+  --search-panel: #fff7ea;
+  --search-row: #fffdf8;
+  --search-ink: #271b12;
+  --search-muted: #544032;
+  --search-border: #cbb89e;
+  --search-focus: #8a450e;
+  background: var(--search-panel);
+  color: var(--search-ink);
 }
-body[data-subject-theme="history"] .history-item .item-ja {
-  color: var(--subject-muted);
+.history-search-panel :is(input, select) {
+  background: var(--search-row);
+  color: var(--search-ink);
+  border-color: var(--search-border);
+}
+.history-search-panel :focus-visible {
+  outline-color: var(--search-focus);
+}
+#history-pages {
+  margin: 8px 0 14px;
+}
+.history-item {
+  display: grid;
+  gap: 3px;
+  margin: 10px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--search-border);
+  border-radius: 12px;
+  background: var(--search-row);
+  color: var(--search-ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.history-item:hover {
+  border-color: var(--search-focus);
+}
+.history-item-meta {
+  color: var(--search-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.history-question {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.history-meaning {
+  color: var(--search-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+@media (prefers-color-scheme: dark) {
+  body[data-subject-theme="history"] #app .card.history-search-panel {
+    --search-panel: #261c14;
+    --search-row: #33271e;
+    --search-ink: #fff6e7;
+    --search-muted: #e7cfb7;
+    --search-border: #826852;
+    --search-focus: #ffd685;
+  }
 }
 body[data-subject-theme="history"] #app-menu nav a.active {
   background: var(--subject-accent);

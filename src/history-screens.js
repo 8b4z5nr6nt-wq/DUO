@@ -2,10 +2,34 @@ import { day, shuffle } from "./core.js";
 
 const base = "#subject/history";
 const ratingLabels = ["覚えていない", "微妙", "覚えた"];
+export const historyCategories = Object.freeze({
+  era: "年代",
+  person: "人物",
+  event: "出来事",
+  term: "用語",
+  other: "その他",
+  uncategorized: "未分類",
+});
+export const isHistoryCategory = (value) =>
+  typeof value === "string" && Object.hasOwn(historyCategories, value);
+const cardCategory = (card) => card.category ?? "uncategorized";
+const matchesCategory = (card, category) =>
+  category === "all" || cardCategory(card) === category;
+const categoryOptions = (current, includeAll = true) =>
+  (includeAll
+    ? [["all", "すべて"], ...Object.entries(historyCategories)]
+    : Object.entries(historyCategories)
+  )
+    .map(
+      ([value, label]) =>
+        `<option value="${value}"${value === current ? " selected" : ""}>${label}</option>`,
+    )
+    .join("");
 const defaults = {
   goal: 10,
   order: "number",
   filter: "all",
+  category: "all",
   from: 0,
   to: 0,
   count: 0,
@@ -14,8 +38,10 @@ export const historySettings = (state) => ({ ...defaults, ...state.settings });
 const cardKey = (number) => `general:${number}`;
 
 export function historyQueue(state) {
-  const { from, to, order, filter, count } = historySettings(state);
-  const cards = state.cards.filter(({ number }) => {
+  const { from, to, order, filter, category, count } = historySettings(state);
+  const cards = state.cards.filter((card) => {
+    const { number } = card;
+    if (!matchesCategory(card, category)) return false;
     if ((from && number < from) || (to && number > to)) return false;
     const rating = state.ratings[cardKey(number)];
     if (filter === "weak") return rating === 0 || rating === 1;
@@ -72,22 +98,23 @@ export function readHistoryBackup(raw, cards) {
 }
 
 function readSettings(raw) {
-  const { goal, order, filter, from, to, count } = raw;
+  const { goal, order, filter, category = "all", from, to, count } = raw;
   if (
     !Number.isSafeInteger(goal) ||
     goal < 1 ||
     goal > 1000 ||
     !["number", "random"].includes(order) ||
     !["all", "weak", "new"].includes(filter) ||
+    (category !== "all" && !isHistoryCategory(category)) ||
     ![from, to, count].every(
       (value) => Number.isSafeInteger(value) && value >= 0,
     ) ||
     count > 10000 ||
     (from && to && from > to)
   ) {
-    throw Error("出題範囲・問題数・1日の目標を確認してください。");
+    throw Error("分類・出題範囲・問題数・1日の目標を確認してください。");
   }
-  return { goal, order, filter, from, to, count };
+  return { goal, order, filter, category, from, to, count };
 }
 
 const tone = ["#bf6f57", "#ba8419", "#288865"];
@@ -116,25 +143,31 @@ export function renderHistoryScreen(
   const attempts = state.attempts ?? [];
 
   if (screen === "search") {
-    app.innerHTML = `<h1>検索</h1><section class="card">
+    app.innerHTML = `<h1>検索</h1><section class="card history-search-panel">
       <label>番号・問題・答え<input id="history-search" type="search" value="${esc(context.query ?? "")}"></label>
-      <p id="history-matches" role="status"></p><div id="history-list"></div>
-      <div class="row between" id="history-pages" hidden><button id="history-prev" type="button">前へ</button><span id="history-page"></span><button id="history-next" type="button">次へ</button></div>
+      <label>分類<select id="history-search-category">${categoryOptions(context.searchCategory ?? "all")}</select></label>
+      <p id="history-matches" role="status"></p>
+      <div id="history-pages" class="row between" role="group" aria-label="検索結果のページ" hidden><button id="history-prev" type="button">← 前へ</button><span id="history-page"></span><button id="history-next" type="button">次へ →</button></div>
+      <div id="history-list"></div>
     </section>`;
     const input = select("#history-search");
-    let index = 0;
+    const category = select("#history-search-category");
+    let index = context.searchPage ?? 0;
     const pageSize = 40;
     function update() {
       const query = normalize(input.value);
       const matches = list
         .filter(
-          ({ number, question, answer }) =>
-            String(number).includes(query) ||
-            normalize(question).includes(query) ||
-            normalize(answer).includes(query),
+          (card) =>
+            matchesCategory(card, category.value) &&
+            (String(card.number).includes(query) ||
+              normalize(card.question).includes(query) ||
+              normalize(card.answer).includes(query)),
         )
         .sort((a, b) => a.number - b.number);
       const pages = Math.ceil(matches.length / pageSize);
+      index = Math.max(0, Math.min(index, pages - 1));
+      context.searchPage = index;
       select("#history-matches").textContent = `${matches.length} 件`;
       select("#history-pages").hidden = pages <= 1;
       select("#history-prev").disabled = index <= 0;
@@ -144,13 +177,21 @@ export function renderHistoryScreen(
         matches
           .slice(index * pageSize, (index + 1) * pageSize)
           .map(
-            ({ number, question, answer }) =>
-              `<a class="list-item history-item" href="${base}/detail/${number}"><span class="item-number">#${number}</span><span class="item-body"><span class="item-en">${esc(question)}</span><span class="item-ja">${esc(answer)}</span></span><span aria-hidden="true">›</span></a>`,
+            (card) =>
+              `<a class="history-item" href="${base}/detail/${card.number}">
+              <span class="history-item-meta">#${card.number} · ${historyCategories[cardCategory(card)]}</span>
+              <span class="history-question">${esc(card.question)}</span>
+              <span class="history-meaning">${esc(card.answer)}</span></a>`,
           )
           .join("") || '<p class="muted">該当するカードはありません。</p>';
     }
     input.addEventListener("input", () => {
       context.query = input.value;
+      index = 0;
+      update();
+    });
+    category.addEventListener("change", () => {
+      context.searchCategory = category.value;
       index = 0;
       update();
     });
@@ -172,8 +213,23 @@ export function renderHistoryScreen(
       ? `<h1>カード ${card.number}</h1><section class="card">
       <p class="prompt">${esc(card.question)}</p><p class="history-answer">${esc(card.answer)}</p>
       <p class="muted">${ratingLabels[state.ratings[cardKey(card.number)]] ?? "未学習"}</p>
+      <form id="history-card-category"><label>分類<select name="category">${categoryOptions(cardCategory(card), false)}</select></label><button type="submit">分類を保存</button></form>
       </section><a class="button" href="${base}/search">検索へ戻る</a>`
       : `<h1>カードが見つかりません</h1><a class="button" href="${base}/search">検索へ戻る</a>`;
+    if (card)
+      select("#history-card-category").onsubmit = async (event) => {
+        event.preventDefault();
+        const { value } = event.currentTarget.elements.category;
+        if (context.busy || !isHistoryCategory(value)) return;
+        const next = {
+          ...context.state,
+          cards: context.state.cards.map((item) =>
+            item.number === card.number ? { ...item, category: value } : item,
+          ),
+        };
+        if ((await save(next)) && isCurrent())
+          notify("分類を保存しました。", "success");
+      };
     return true;
   }
 
@@ -217,6 +273,7 @@ export function renderHistoryScreen(
       ? `<div class="grid">
       ${control("from", "開始番号", settings.from, "", "最初から")}
       ${control("to", "終了番号", settings.to, "", "最後まで")}
+      <label>分類<select name="category">${categoryOptions(settings.category)}</select></label>
       <label>絞り込み<select name="filter"><option value="all">すべて</option><option value="weak">苦手</option><option value="new">未学習</option></select></label>
       <label>出題順<select name="order"><option value="number">番号順</option><option value="random">ランダム</option></select></label>
       ${control("count", "問題数", settings.count, 10000, "すべて")}

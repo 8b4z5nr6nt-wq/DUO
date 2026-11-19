@@ -15,7 +15,7 @@ import {
 } from "./schedule.js";
 import { prepareImport, applyImport } from "./materials.js";
 import "./style.css";
-import { installSwipeNavigation, bindCardSwipe } from "./swipe.js";
+import { installSwipeNavigation, bindCardSwipe, bindCardTap } from "./swipe.js";
 import { emptyDrawing, hasInk, mountHandwriting } from "./handwriting.js";
 import {
   defaults,
@@ -439,7 +439,7 @@ function learnCard() {
     study.direction === "en-ja" && item.kind === "sentence"
       ? cardWordSegments(item, state.items)
       : [{ text: study.direction === "en-ja" ? item.en : item.ja }];
-  app.innerHTML = `<div class="learning card-learning">${title("カード学習", `${study.index + 1} / ${study.queue.length} 問 · ${type(item)} ${item.number}`)}<div class="card-clock"><span id="timer"></span><button id="pause">${study.paused ? "再開" : "一時停止"}</button><progress id="card-timer" aria-label="残り時間" max="${study.config.limit}" value="${Math.max(0, study.config.limit - study.elapsed)}" ${study.config.timer ? "" : "hidden"}></progress></div><p id="paused" ${study.paused ? "" : "hidden"}>一時停止中です。</p><section class="swipe-card learning-card" aria-label="学習カード"><div class="card-question"><p class="prompt">${parts.map((part, i) => (part.translation ? `<button type="button" class="card-word" data-card-word="${i}" ${disabled ? "disabled" : ""}>${esc(part.text)}</button>` : esc(part.text))).join("")}</p><p id="card-word-meaning" role="status"></p></div><div class="card-answer" aria-live="polite">${revealed ? `<p>${esc(answerText())}</p>` : `<p class="muted">${study.config.timer ? "時間が来たら答えを表示します" : "答えを思い出しましょう"}</p>`}</div></section><p id="hint" hidden></p>${revealed ? `<p class="card-swipe-help">左へ：覚えていない　／　右へ：覚えた</p><div class="row card-ratings"><button data-card-rating="0" ${disabled ? "disabled" : ""}>覚えていない</button><button data-card-rating="1" ${disabled ? "disabled" : ""}>微妙</button><button class="primary" data-card-rating="2" ${disabled ? "disabled" : ""}>覚えた</button></div>` : `<button id="flip-card" ${disabled ? "disabled" : ""}>カードをめくる</button>`}<div class="row"><button id="skip" ${disabled ? "disabled" : ""}>スキップ</button><button id="finish" class="danger">ここで終了して結果を見る</button></div></div>`;
+  app.innerHTML = `<div class="learning card-learning">${title("カード学習", `${study.index + 1} / ${study.queue.length} 問 · ${type(item)} ${item.number}`)}<div class="card-clock"><span id="timer"></span><button id="pause">${study.paused ? "再開" : "一時停止"}</button><progress id="card-timer" aria-label="残り時間" max="${study.config.limit}" value="${Math.max(0, study.config.limit - study.elapsed)}" ${study.config.timer ? "" : "hidden"}></progress></div><p id="paused" ${study.paused ? "" : "hidden"}>一時停止中です。</p><section class="swipe-card learning-card" aria-label="学習カード"><div class="card-question"><p class="prompt">${parts.map((part, i) => (part.translation ? `<button type="button" class="card-word" data-card-word="${i}" ${disabled ? "disabled" : ""}>${esc(part.text)}</button>` : esc(part.text))).join("")}</p><p id="card-word-meaning" role="status"></p></div><div class="card-answer" aria-live="polite">${revealed ? `<p>${esc(answerText())}</p>` : `<p class="muted">${study.config.timer ? "タップ・時間切れで答えを表示" : "タップして答えを表示"}</p>`}</div></section><p id="hint" hidden></p>${revealed ? `<p class="card-swipe-help">左へ：覚えていない　／　右へ：覚えた</p><div class="row card-ratings"><button data-card-rating="0" ${disabled ? "disabled" : ""}>覚えていない</button><button data-card-rating="1" ${disabled ? "disabled" : ""}>微妙</button><button class="primary" data-card-rating="2" ${disabled ? "disabled" : ""}>覚えた</button></div>` : `<button id="flip-card" ${disabled ? "disabled" : ""}>カードをめくる</button>`}<div class="row"><button id="skip" ${disabled ? "disabled" : ""}>スキップ</button><button id="finish" class="danger">ここで終了して結果を見る</button></div></div>`;
   $("#pause").onclick = () => {
     if (!study.paused) advanceClock();
     study.paused = !study.paused;
@@ -450,12 +450,15 @@ function learnCard() {
   $("#skip").onclick = async () => {
     if (await recordAttempt(null, "skip")) next();
   };
-  if ($("#flip-card"))
-    $("#flip-card").onclick = () => {
-      if (study.paused || busy) return;
+  if (!revealed) {
+    const reveal = () => {
+      if (study.paused || busy || study.phase !== "question") return;
       study.phase = "evaluate";
       learn();
     };
+    $("#flip-card").onclick = reveal;
+    if (!disabled) bindCardTap($(".card-learning"), reveal);
+  }
   app.querySelectorAll("[data-card-word]").forEach(
     (button) =>
       (button.onclick = () => {

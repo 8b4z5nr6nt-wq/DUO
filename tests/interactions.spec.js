@@ -273,9 +273,7 @@ test("長い例文カードは先頭から読めて上下の本文を個別に�
   await page.getByText("タイマー・ヒント", { exact: true }).click();
   await page.getByLabel("時間制限を使う").uncheck();
   await page.getByRole("button", { name: "学習を開始", exact: true }).click();
-  await page
-    .getByRole("button", { name: "カードをめくる", exact: true })
-    .click();
+  await page.locator(".swipe-card").click();
   for (const selector of [".card-question", ".card-answer"]) {
     const metrics = await page.locator(selector).evaluate((el) => {
       el.scrollTop = 0;

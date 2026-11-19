@@ -78,7 +78,7 @@ test("国語と歴史総合は別々に取り込み、評価を残してオフ�
   await expect(page.getByText(classical.answer, { exact: true })).toHaveCount(
     0,
   );
-  await page.getByRole("button", { name: "カードをめくる" }).click();
+  await page.locator(".swipe-card").click();
   await expect(page.getByText(classical.answer, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "覚えた →", exact: true }).click();
   await expect(page.getByRole("heading", { name: "学習結果" })).toBeVisible();
@@ -197,4 +197,84 @@ test("歴史総合の検索、学習条件、既存評価、履歴とバック�
   } finally {
     await fresh.close();
   }
+});
+
+test("歴の分類を検索と出題に使い、ページ操作を一覧の上から行える", async ({
+  page,
+}) => {
+  const cards = Array.from({ length: 41 }, (_, i) => ({
+    number: i + 1,
+    question: `架空のカード ${i + 1}`,
+    answer: i === 0 ? "人物カードの答え" : "練習用の答え",
+    ...(i === 0 ? { category: "person" } : i === 1 ? { category: "era" } : {}),
+  }));
+  await page.goto("/#subject/history/data");
+  await upload(page, material("history", cards));
+  await confirm(page);
+  await navigate(page, "検索");
+  const pages = page.getByRole("group", { name: "検索結果のページ" });
+  await expect(pages).toBeVisible();
+  expect(
+    await pages.evaluate(
+      (node) =>
+        !!(
+          node.compareDocumentPosition(
+            document.querySelector("#history-list"),
+          ) & Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+    ),
+  ).toBe(true);
+  await pages.getByRole("button", { name: /次へ/ }).click();
+  await expect(page.locator("#history-page")).toHaveText("2 / 2");
+  await expect(
+    page.getByRole("link", { name: /架空のカード 41/ }),
+  ).toBeVisible();
+  await pages.getByRole("button", { name: /前へ/ }).click();
+  await expect(page.locator("#history-page")).toHaveText("1 / 2");
+
+  const searchCategory = page.getByRole("combobox", {
+    name: "分類",
+    exact: true,
+  });
+  await searchCategory.selectOption("person");
+  await expect(page.locator("#history-matches")).toHaveText("1 件");
+  await expect(pages).toBeHidden();
+  await page.getByLabel("番号・問題・答え").fill("人物カードの答え");
+  await expect(page.locator("#history-matches")).toHaveText("1 件");
+
+  await searchCategory.selectOption("uncategorized");
+  await expect(page.locator("#history-matches")).toHaveText("0 件");
+  await page.getByLabel("番号・問題・答え").fill("４１");
+  await page.getByRole("link", { name: /架空のカード 41/ }).click();
+  await page
+    .getByRole("combobox", { name: "分類", exact: true })
+    .selectOption("term");
+  await page.getByRole("button", { name: "分類を保存" }).click();
+  await expect(page.getByText("分類を保存しました。")).toBeVisible();
+
+  await navigate(page, "データ");
+  await upload(
+    page,
+    material("history", [{ ...cards[40], answer: "更新した答え" }]),
+  );
+  await confirm(page);
+  await navigate(page, "検索");
+  await searchCategory.selectOption("term");
+  await expect(page.getByRole("link", { name: /更新した答え/ })).toBeVisible();
+
+  await navigate(page, "学習");
+  await page
+    .getByRole("combobox", { name: "分類", exact: true })
+    .selectOption("term");
+  await page.getByRole("button", { name: "学習を開始", exact: true }).click();
+  await expect(page.locator(".prompt")).toHaveText("架空のカード 41");
+  await page.locator(".swipe-card").click();
+  await expect(page.getByText("更新した答え", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "覚えた →", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "学習結果" })).toBeVisible();
+  await page.goto("/#subject/history/setup");
+  await page.reload();
+  await expect(
+    page.getByRole("combobox", { name: "分類", exact: true }),
+  ).toHaveValue("term");
 });

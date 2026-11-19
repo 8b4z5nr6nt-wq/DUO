@@ -1,9 +1,10 @@
 import { createStorage, storageMessage } from "./storage.js";
-import { bindCardSwipe } from "./swipe.js";
+import { bindCardSwipe, bindCardTap } from "./swipe.js";
 import { day } from "./core.js";
 import {
   historyQueue,
   historySettings,
+  isHistoryCategory,
   readHistoryBackup,
   renderHistoryScreen,
 } from "./history-screens.js";
@@ -43,7 +44,15 @@ function readSubjectCards(raw, id, backup = false) {
       card.number < 1
     )
       throw Error(`${index + 1}件目のカードの分類と番号を確認してください。`);
-    const { number, question, answer } = card;
+    const { number, question, answer, category } = card;
+    if (
+      id === "history" &&
+      category !== undefined &&
+      !isHistoryCategory(category)
+    )
+      throw Error(
+        `${index + 1}件目のカードの分類（category）を確認してください。`,
+      );
     if (
       typeof question !== "string" ||
       !question.trim() ||
@@ -57,7 +66,14 @@ function readSubjectCards(raw, id, backup = false) {
         `${subjects[id].decks[deck]}の番号${number}が重複しています。`,
       );
     seen.add(key);
-    return { deck, number, question: question.trim(), answer: answer.trim() };
+    const result = {
+      deck,
+      number,
+      question: question.trim(),
+      answer: answer.trim(),
+    };
+    if (id === "history" && category !== undefined) result.category = category;
+    return result;
   });
 }
 
@@ -266,9 +282,11 @@ export function createSubjectScreens(app, esc, notify, versionCard) {
             const next = new Map(
               context.state.cards.map((card) => [keyOf(card), card]),
             );
-            for (const card of cards)
-              if (!restore || !next.has(keyOf(card)))
-                next.set(keyOf(card), card);
+            for (const card of cards) {
+              const key = keyOf(card);
+              if (restore && next.has(key)) continue;
+              next.set(key, { ...next.get(key), ...card });
+            }
             const nextState = { ...context.state, cards: [...next.values()] };
             if (restore) {
               const attempts = new Map(
@@ -308,7 +326,7 @@ export function createSubjectScreens(app, esc, notify, versionCard) {
         <p class="muted">${subject.decks[card.deck]} · ${session.index + 1} / ${session.queue.length} 問</p>
         <section class="swipe-card learning-card" aria-label="学習カード">
           <div class="card-question"><p class="prompt">${esc(card.question)}</p></div>
-          <div class="card-answer" aria-live="polite">${revealed ? `<p>${esc(card.answer)}</p>` : '<p class="muted">答えを思い出しましょう</p>'}</div>
+          <div class="card-answer" aria-live="polite">${revealed ? `<p>${esc(card.answer)}</p>` : '<p class="muted">タップして答えを表示</p>'}</div>
         </section>
         ${revealed ? '<div class="row card-ratings"><button data-subject-rating="0">← 覚えていない</button><button data-subject-rating="1">微妙</button><button class="primary" data-subject-rating="2">覚えた →</button></div>' : '<button id="subject-flip" class="primary">カードをめくる</button>'}
         <div class="row subject-card-actions">${back}<button id="subject-finish" type="button">学習を終える</button></div></div>`;
@@ -318,11 +336,14 @@ export function createSubjectScreens(app, esc, notify, versionCard) {
         void render(id, screen);
       };
       if (!revealed) {
-        find("#subject-flip").onclick = () => {
+        const reveal = () => {
+          if (!isCurrent() || session.revealed || context.busy) return;
           session.revealed = true;
           void render(id, screen);
           find('[data-subject-rating="2"]')?.focus({ preventScroll: true });
         };
+        find("#subject-flip").onclick = reveal;
+        bindCardTap(find(".card-learning"), reveal);
         return;
       }
       const buttons = app.querySelectorAll("[data-subject-rating]");
@@ -417,6 +438,7 @@ export function createSubjectScreens(app, esc, notify, versionCard) {
 function downloadTemplate(id) {
   const card = { number: 1, question: "問題を入力", answer: "答えを入力" };
   if (id === "ja") card.deck = "modern";
+  if (id === "history") card.category = "event";
   const template = {
     format: "subject-cards",
     version: 1,

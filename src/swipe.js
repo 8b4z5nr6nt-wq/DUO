@@ -207,6 +207,41 @@ export function installSwipeNavigation(
   };
 }
 
+export function bindCardTap(surface, reveal) {
+  let start = null;
+  let moved = false;
+  surface.classList.add("can-flip");
+  surface.addEventListener("pointerdown", (event) => {
+    if (!event.isPrimary || event.button !== 0) {
+      moved = true;
+      return;
+    }
+    moved = false;
+    start = { id: event.pointerId, x: event.clientX, y: event.clientY };
+  });
+  function checkMotion(event) {
+    if (
+      start?.id === event.pointerId &&
+      Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12
+    )
+      moved = true;
+  }
+  surface.addEventListener("pointermove", checkMotion);
+  surface.addEventListener("pointerup", (event) => {
+    checkMotion(event);
+    start = null;
+  });
+  surface.addEventListener("pointercancel", () => {
+    start = null;
+    moved = true;
+  });
+  surface.addEventListener("click", (event) => {
+    if (moved || event.target.closest(`a, ${BLOCKED_TARGETS}`)) return;
+    if (window.getSelection()?.isCollapsed === false) return;
+    reveal();
+  });
+}
+
 export function bindCardSwipe(card, canRate, rate) {
   let pointer = null,
     suppressClick = false;
