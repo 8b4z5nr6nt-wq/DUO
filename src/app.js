@@ -1589,11 +1589,15 @@ function showPreview() {
     }
   };
 }
+function versionCard() {
+  return `<section class="card version-card" aria-labelledby="version-heading"><div><h2 id="version-heading">現在表示中のバージョン</h2></div><strong class="version-number">v${esc(appVersion)}</strong><a class="button" href="${refreshURL()}" data-refresh-app>最新版を開く</a></section>`;
+}
 function settings() {
   const s = state.settings;
   app.innerHTML =
     title("設定") +
-    `<section class="card version-card" aria-labelledby="version-heading"><div><h2 id="version-heading">現在表示中のバージョン</h2></div><strong class="version-number">v${esc(appVersion)}</strong><a class="button" href="${refreshURL()}" data-refresh-app>最新版を開く</a></section><form id="settings-form"><section class="card"><label>1日の学習目標（回答数）<input name="goal" type="number" min="1" max="1000" value="${s.goal}" required></label>${timingFields(s)}</section><section class="card"><h2>英語回答の表記ゆれ</h2>${[
+    versionCard() +
+    `<form id="settings-form"><section class="card"><label>1日の学習目標（回答数）<input name="goal" type="number" min="1" max="1000" value="${s.goal}" required></label>${timingFields(s)}</section><section class="card"><h2>英語回答の表記ゆれ</h2>${[
       ["ignoreCase", "大小文字を区別しない"],
       ["ignoreSpaces", "余分な空白をまとめる"],
       ["ignorePunctuation", "句読点を無視する"],
@@ -1678,17 +1682,32 @@ function render() {
   document.querySelectorAll("[data-english-nav]").forEach((link) => {
     link.hidden = inSubject || atPicker;
   });
-  for (const [selector, suffix] of [
-    ["[data-subject-home]", ""],
-    ["[data-subject-data]", "/data"],
-  ]) {
-    const link = document.querySelector(selector);
-    link.hidden = !subjectHasCards;
-    if (subjectHasCards) link.href = `#subject/${parts[0]}${suffix}`;
+  const history = inSubject && parts[0] === "history";
+  const subjectRoot = `#subject/${parts[0]}`;
+  document.querySelector(".version-badge").href = history
+    ? `${subjectRoot}/settings`
+    : "#settings";
+  for (const link of document.querySelectorAll("[data-subject-page]")) {
+    const page = link.dataset.subjectPage;
+    link.hidden =
+      !subjectHasCards || (link.hasAttribute("data-history-only") && !history);
+    if (!link.hidden) link.href = page ? `${subjectRoot}/${page}` : subjectRoot;
+    if (!page) link.textContent = history ? "ホーム" : "科目のホーム";
+    if (page === "data")
+      link.textContent = history ? "データ" : "JSONを取り込む";
   }
+  const subjectPage =
+    { learn: "setup", detail: "search" }[parts[1]] || parts[1];
+  const activeHash = inSubject
+    ? subjectPage
+      ? `${subjectRoot}/${subjectPage}`
+      : subjectRoot
+    : "#" + navRoute;
   document
     .querySelectorAll("nav a")
-    .forEach((a) => a.classList.toggle("active", a.hash === "#" + navRoute));
+    .forEach((a) =>
+      a.classList.toggle("active", !a.hidden && a.hash === activeHash),
+    );
   (
     ({
       subjects: () => {
@@ -1712,7 +1731,7 @@ function render() {
   )(...parts);
   window.scrollTo(0, 0);
 }
-const subjectScreens = createSubjectScreens(app, esc, notify);
+const subjectScreens = createSubjectScreens(app, esc, notify, versionCard);
 installMenu(pauseForLeaving);
 window.addEventListener("hashchange", render);
 document.addEventListener("keydown", (event) => {

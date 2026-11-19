@@ -1911,6 +1911,34 @@ button {
     var(--subject-accent);
   color: var(--subject-accent-ink);
 }
+.subject-tile-english {
+  background: var(--active);
+  color: #fff;
+}
+#history-pages[hidden] {
+  display: none;
+}
+.history-answer {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+body[data-subject-theme="history"] #app :is(.history-link, .history-item) {
+  color: var(--subject-ink);
+}
+body[data-subject-theme="history"] .history-item .item-number {
+  background: #ffd680;
+  color: #452708;
+}
+body[data-subject-theme="history"] .history-item .item-ja {
+  color: var(--subject-muted);
+}
+body[data-subject-theme="history"] #app-menu nav a.active {
+  background: var(--subject-accent);
+  color: var(--subject-accent-ink);
+}
+body[data-subject-theme="history"] .version-number {
+  color: var(--subject-ink);
+}
 body[data-subject-theme] {
   background:
     radial-gradient(ellipse at 85% 6%, #ffffff0d, transparent 58%),

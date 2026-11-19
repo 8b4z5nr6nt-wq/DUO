@@ -1,5 +1,12 @@
 import { createStorage, storageMessage } from "./storage.js";
 import { bindCardSwipe } from "./swipe.js";
+import { day } from "./core.js";
+import {
+  historyQueue,
+  historySettings,
+  readHistoryBackup,
+  renderHistoryScreen,
+} from "./history-screens.js";
 
 const subjects = {
   ja: {
@@ -13,9 +20,9 @@ const fileLimit = 10 * 1024 * 1024;
 const cardLimit = 10000;
 const keyOf = ({ deck, number }) => `${deck}:${number}`;
 
-function readSubjectCards(raw, id) {
+function readSubjectCards(raw, id, backup = false) {
   if (
-    raw?.format !== "subject-cards" ||
+    raw?.format !== (backup ? "history-backup" : "subject-cards") ||
     raw.version !== 1 ||
     !Array.isArray(raw.cards)
   )
@@ -24,7 +31,7 @@ function readSubjectCards(raw, id) {
     );
   if (raw.subject !== id)
     throw Error("選択中の科目とJSONの科目が一致しません。");
-  if (!raw.cards.length || raw.cards.length > cardLimit)
+  if ((!backup && !raw.cards.length) || raw.cards.length > cardLimit)
     throw Error("カードを1〜10,000件指定してください。");
   const seen = new Set();
   return raw.cards.map((card, index) => {
@@ -56,19 +63,19 @@ function readSubjectCards(raw, id) {
 
 export function subjectPicker() {
   return `<section class="subject-picker"><h1>科目を選ぶ</h1><div class="subject-grid">
-    <a class="subject-tile" href="#home"><strong>英</strong><span>英語</span></a>
+    <a class="subject-tile subject-tile-english" href="#home"><strong>英</strong><span>英語</span></a>
     <a class="subject-tile" data-subject-theme="ja" href="#subject/ja"><strong>国</strong><span>現代文・古文単語</span></a>
     <a class="subject-tile" href="#subject/time"><strong>時</strong><span>準備中</span></a>
     <a class="subject-tile" data-subject-theme="history" href="#subject/history"><strong>歴</strong><span>歴史総合</span></a>
   </div></section>`;
 }
 
-export function createSubjectScreens(app, esc, notify) {
+export function createSubjectScreens(app, esc, notify, versionCard) {
   const contexts = new Map();
   const find = (selector) => app.querySelector(selector);
   let renderId = 0;
 
-  async function render(id, screen = "") {
+  async function render(id, screen = "", part = "") {
     const token = ++renderId;
     const hash = location.hash;
     const isCurrent = () => token === renderId && location.hash === hash;
@@ -132,16 +139,71 @@ export function createSubjectScreens(app, esc, notify) {
       location.hash = base + (page ? `/${page}` : "");
     };
     const back = `<a class="button" href="${base}">${subject.name}のホーム</a>`;
+    const isHistory = id === "history";
+    const queue = state.cards.filter(
+      (card) => context.deck === "all" || card.deck === context.deck,
+    );
+    function start() {
+      if (context.busy || context.session) return;
+      const cards = isHistory
+        ? historyQueue(context.state)
+        : [...queue].sort(
+            (a, b) => a.deck.localeCompare(b.deck) || a.number - b.number,
+          );
+      if (!cards.length) {
+        notify(
+          "この条件で出題できるカードがありません。学習設定をご確認ください。",
+        );
+        return;
+      }
+      context.session = {
+        queue: cards,
+        index: 0,
+        revealed: false,
+        totals: [0, 0, 0],
+      };
+      go("learn");
+    }
+    if (
+      isHistory &&
+      renderHistoryScreen(screen, {
+        app,
+        part,
+        context,
+        state,
+        esc,
+        save,
+        notify,
+        isCurrent,
+        start,
+        versionCard,
+      })
+    )
+      return;
 
     if (screen === "data") {
       app.innerHTML =
-        heading +
+        (isHistory ? "<h1>データ管理</h1>" : heading) +
         `<section class="card"><h2>教材JSONの取り込み</h2>
         <label>JSONファイル<input id="subject-file" type="file" accept=".json,application/json"></label>
         <label>またはJSONを貼り付け<textarea id="subject-json" spellcheck="false"></textarea></label>
         <div class="row"><button id="subject-preview" class="primary" type="button">取り込み前に確認</button>
         <button id="subject-template" type="button">JSONのひな形</button></div>
-        <div id="subject-confirmation" aria-live="polite"></div></section>${back}`;
+        <div id="subject-confirmation" aria-live="polite"></div></section>
+        ${isHistory ? `<section class="card"><h2>バックアップ</h2><p>教材・評価・履歴・設定を保存します。復元は上の取り込みから行えます。</p><button id="history-backup" type="button">バックアップを保存</button></section>` : ""}${back}`;
+      if (isHistory)
+        find("#history-backup").onclick = () => {
+          const current = context.state;
+          downloadJSON("history-backup.json", {
+            format: "history-backup",
+            version: 1,
+            subject: id,
+            cards: current.cards,
+            ratings: current.ratings,
+            attempts: current.attempts ?? [],
+            settings: historySettings(current),
+          });
+        };
       const file = find("#subject-file");
       const input = find("#subject-json");
       const confirmation = find("#subject-confirmation");
@@ -182,7 +244,9 @@ export function createSubjectScreens(app, esc, notify) {
               "JSONを読み取れません。ファイルまたは貼り付けた内容を確認してください。",
             );
           }
-          const cards = readSubjectCards(raw, id);
+          const backup = isHistory && raw?.format === "history-backup";
+          const cards = readSubjectCards(raw, id, backup);
+          const restore = backup ? readHistoryBackup(raw, cards) : null;
           const merged = new Map(
             context.state.cards.map((card) => [keyOf(card), card]),
           );
@@ -192,9 +256,9 @@ export function createSubjectScreens(app, esc, notify) {
           for (const card of cards) merged.set(keyOf(card), card);
           if (merged.size > cardLimit)
             throw Error("登録できるカードは科目ごとに10,000件までです。");
-          confirmation.innerHTML = `<p>追加 ${cards.length - updated}件 · 更新 ${updated}件</p>
-            <p>最初のカード</p><p class="subject-import-sample">${esc(cards[0].question)} → ${esc(cards[0].answer)}</p>
-            <button id="subject-import" type="button" class="primary">この内容を登録</button>`;
+          confirmation.innerHTML = `<p>追加 ${cards.length - updated}件 · 更新 ${backup ? 0 : updated}件</p>
+            ${restore ? "<p>既存のカード・評価・設定を優先し、未登録のカードと履歴を追加します。</p>" : `<p>最初のカード</p><p class="subject-import-sample">${esc(cards[0].question)} → ${esc(cards[0].answer)}</p>`}
+            <button id="subject-import" type="button" class="primary">${restore ? "バックアップを追加統合" : "この内容を登録"}</button>`;
           find("#subject-import").onclick = async (event) => {
             const commit = event.currentTarget;
             commit.disabled = true;
@@ -202,8 +266,21 @@ export function createSubjectScreens(app, esc, notify) {
             const next = new Map(
               context.state.cards.map((card) => [keyOf(card), card]),
             );
-            for (const card of cards) next.set(keyOf(card), card);
-            if (await save({ ...context.state, cards: [...next.values()] })) {
+            for (const card of cards)
+              if (!restore || !next.has(keyOf(card)))
+                next.set(keyOf(card), card);
+            const nextState = { ...context.state, cards: [...next.values()] };
+            if (restore) {
+              const attempts = new Map(
+                restore.attempts.map((item) => [item.id, item]),
+              );
+              for (const item of nextState.attempts ?? [])
+                attempts.set(item.id, item);
+              nextState.attempts = [...attempts.values()];
+              nextState.ratings = { ...restore.ratings, ...nextState.ratings };
+              nextState.settings ??= restore.settings;
+            }
+            if (await save(nextState)) {
               if (isCurrent()) go();
             } else commit.disabled = false;
           };
@@ -255,7 +332,18 @@ export function createSubjectScreens(app, esc, notify) {
           button.disabled = true;
         });
         const ratings = { ...context.state.ratings, [keyOf(card)]: rating };
-        if (await save({ ...context.state, ratings })) {
+        const next = { ...context.state, ratings };
+        if (isHistory)
+          next.attempts = [
+            ...(next.attempts ?? []),
+            {
+              id: crypto.randomUUID(),
+              number: card.number,
+              rating,
+              at: Date.now(),
+            },
+          ];
+        if (await save(next)) {
           session.totals[rating]++;
           session.index++;
           session.revealed = false;
@@ -275,16 +363,18 @@ export function createSubjectScreens(app, esc, notify) {
       return;
     }
 
-    const queue = state.cards.filter(
-      (card) => context.deck === "all" || card.deck === context.deck,
-    );
     const learned = queue.filter(
       (card) => state.ratings[keyOf(card)] === 2,
     ).length;
+    const goal = isHistory ? historySettings(state).goal : 0;
+    const today = isHistory
+      ? (state.attempts ?? []).filter((entry) => day(entry.at) === day()).length
+      : 0;
     app.innerHTML =
       heading +
       `<section class="card subject-home">
       ${subject.detail ? `<p>${subject.detail}</p>` : ""}
+      ${isHistory ? `<h2>今日の学習</h2><p>${today} / ${goal} 問</p><progress aria-label="今日の学習" value="${today}" max="${goal}"></progress>` : ""}
       ${
         id === "ja"
           ? `<label>学習範囲<select id="subject-deck"><option value="all">すべて</option>${Object.entries(
@@ -304,6 +394,7 @@ export function createSubjectScreens(app, esc, notify) {
           : `<button id="subject-start" type="button" ${!queue.length || context.busy ? "disabled" : ""} class="primary">カード学習を開始</button>`
       }
       <a class="button" href="${base}/data">JSONを取り込む</a>
+      ${isHistory ? `<a class="button" href="${base}/setup">範囲・出題設定</a>` : ""}
     </section>`;
     const deck = find("#subject-deck");
     if (deck) {
@@ -313,20 +404,8 @@ export function createSubjectScreens(app, esc, notify) {
         void render(id);
       };
     }
-    const start = find("#subject-start");
-    if (start)
-      start.onclick = () => {
-        if (context.busy) return;
-        context.session = {
-          queue: queue.sort(
-            (a, b) => a.deck.localeCompare(b.deck) || a.number - b.number,
-          ),
-          index: 0,
-          revealed: false,
-          totals: [0, 0, 0],
-        };
-        go("learn");
-      };
+    const startButton = find("#subject-start");
+    if (startButton) startButton.onclick = start;
   }
 
   return {
@@ -344,12 +423,16 @@ function downloadTemplate(id) {
     subject: id,
     cards: [card],
   };
+  downloadJSON(`${id}-cards.json`, template);
+}
+
+function downloadJSON(filename, data) {
   const url = URL.createObjectURL(
-    new Blob([JSON.stringify(template, null, 2)], { type: "application/json" }),
+    new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
   );
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${id}-cards.json`;
+  link.download = filename;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
