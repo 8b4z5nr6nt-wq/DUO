@@ -28,7 +28,6 @@ async function upload(page, value) {
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(value)),
   });
-  await page.getByRole("button", { name: "取り込み前に確認" }).click();
 }
 async function confirm(page) {
   await page.getByRole("button", { name: "この内容を登録" }).click();
@@ -88,7 +87,11 @@ test("国語と歴史総合は別々に取り込み、評価を残してオフ�
   await page.getByRole("link", { name: "JSONを取り込む" }).click();
   await page
     .getByLabel("またはJSONを貼り付け")
-    .fill(JSON.stringify(material("history", [history])));
+    .fill(
+      ["```json", JSON.stringify(material("history", [history])), "```"].join(
+        "\n",
+      ),
+    );
   await page.getByRole("button", { name: "取り込み前に確認" }).click();
   await confirm(page);
 
@@ -185,7 +188,6 @@ test("歴史総合の検索、学習条件、既存評価、履歴とバック�
   try {
     await fresh.goto("/#subject/history/data");
     await fresh.getByLabel("JSONファイル").setInputFiles(path);
-    await fresh.getByRole("button", { name: "取り込み前に確認" }).click();
     await fresh.getByRole("button", { name: "バックアップを追加統合" }).click();
     await expect(fresh.getByText("2枚 · 覚えた 2枚")).toBeVisible();
     await expect(
@@ -232,17 +234,14 @@ test("歴の分類を検索と出題に使い、ページ操作を一覧の上�
   await pages.getByRole("button", { name: /前へ/ }).click();
   await expect(page.locator("#history-page")).toHaveText("1 / 2");
 
-  const searchCategory = page.getByRole("combobox", {
-    name: "分類",
-    exact: true,
-  });
-  await searchCategory.selectOption("person");
+  const person = page.getByRole("radio", { name: "人物 1", exact: true });
+  await person.check();
   await expect(page.locator("#history-matches")).toHaveText("1 件");
   await expect(pages).toBeHidden();
   await page.getByLabel("番号・問題・答え").fill("人物カードの答え");
   await expect(page.locator("#history-matches")).toHaveText("1 件");
 
-  await searchCategory.selectOption("uncategorized");
+  await page.getByRole("radio", { name: "未分類 0", exact: true }).check();
   await expect(page.locator("#history-matches")).toHaveText("0 件");
   await page.getByLabel("番号・問題・答え").fill("４１");
   await page.getByRole("link", { name: /架空のカード 41/ }).click();
@@ -257,9 +256,12 @@ test("歴の分類を検索と出題に使い、ページ操作を一覧の上�
     page,
     material("history", [{ ...cards[40], answer: "更新した答え" }]),
   );
+  await expect(
+    page.getByRole("list", { name: "取り込むカードの分類" }),
+  ).toHaveText("用語 1件");
   await confirm(page);
   await navigate(page, "検索");
-  await searchCategory.selectOption("term");
+  await page.getByRole("radio", { name: "用語 1", exact: true }).check();
   await expect(page.getByRole("link", { name: /更新した答え/ })).toBeVisible();
 
   await navigate(page, "学習");
@@ -284,13 +286,18 @@ test("TXTの歴史教材を未分類として登録でき、再開や画面移�
 }) => {
   await page.goto("/#subject/history/data");
   const file = page.locator("#subject-file");
-  await expect(file).toHaveAttribute("accept", /\.txt/);
+  await file.setInputFiles({
+    name: "invalid.txt",
+    mimeType: "application/octet-stream",
+    buffer: Buffer.from("JSONではないデータ"),
+  });
+  await expect(page.getByText(/JSONを読み取れません/)).toBeVisible();
+  await expect(page.locator("#subject-import")).toHaveCount(0);
   await file.setInputFiles({
     name: "cards.txt",
-    mimeType: "text/plain",
+    mimeType: "application/octet-stream",
     buffer: Buffer.from(JSON.stringify(material("history", [history]))),
   });
-  await page.getByRole("button", { name: "取り込み前に確認" }).click();
   await expect(
     page.getByText("新規 1 件は「未分類」に入ります。", { exact: true }),
   ).toBeVisible();

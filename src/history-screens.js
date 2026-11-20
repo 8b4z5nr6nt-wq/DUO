@@ -143,26 +143,53 @@ export function renderHistoryScreen(
   const attempts = state.attempts ?? [];
 
   if (screen === "search") {
+    const categories = [
+      ["all", "すべて"],
+      ...Object.entries(historyCategories),
+    ];
+    const current = context.searchCategory ?? "all";
     app.innerHTML = `<h1>検索</h1><section class="card history-search-panel">
       <label>番号・問題・答え<input id="history-search" type="search" value="${esc(context.query ?? "")}"></label>
-      <label>分類<select id="history-search-category">${categoryOptions(context.searchCategory ?? "all")}</select></label>
+      <fieldset id="history-search-categories" class="history-search-categories">
+        <legend>分類</legend>
+        <div>${categories
+          .map(
+            ([value, label]) => `<label class="history-category-option">
+          <input type="radio" name="history-search-category" value="${value}"${current === value ? " checked" : ""}>
+          <span>${label} <span data-category-count="${value}"></span></span>
+        </label>`,
+          )
+          .join("")}</div>
+      </fieldset>
       <p id="history-matches" role="status"></p>
       <div id="history-pages" class="row between" role="group" aria-label="検索結果のページ" hidden><button id="history-prev" type="button">← 前へ</button><span id="history-page"></span><button id="history-next" type="button">次へ →</button></div>
       <div id="history-list"></div>
     </section>`;
     const input = select("#history-search");
-    const category = select("#history-search-category");
+    const category = select("#history-search-categories");
+    const countElements = [
+      ...category.querySelectorAll("[data-category-count]"),
+    ];
     let index = context.searchPage ?? 0;
     const pageSize = 40;
     function update() {
       const query = normalize(input.value);
-      const matches = list
-        .filter(
-          (card) =>
-            matchesCategory(card, category.value) &&
-            (String(card.number).includes(query) ||
-              normalize(card.question).includes(query) ||
-              normalize(card.answer).includes(query)),
+      const queryMatches = list.filter(
+        (card) =>
+          String(card.number).includes(query) ||
+          normalize(card.question).includes(query) ||
+          normalize(card.answer).includes(query),
+      );
+      const counts = new Map([["all", queryMatches.length]]);
+      for (const card of queryMatches) {
+        const value = cardCategory(card);
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+      }
+      for (const count of countElements)
+        count.textContent = counts.get(count.dataset.categoryCount) ?? 0;
+      const matches = queryMatches
+        .filter((card) =>
+          matchesCategory(card, context.searchCategory ?? "all"),
         )
         .sort((a, b) => a.number - b.number);
       const pages = Math.ceil(matches.length / pageSize);
@@ -179,7 +206,7 @@ export function renderHistoryScreen(
           .map(
             (card) =>
               `<a class="history-item" href="${base}/detail/${card.number}">
-              <span class="history-item-meta">#${card.number} · ${historyCategories[cardCategory(card)]}</span>
+              <span class="history-item-meta">#${card.number} <span class="history-item-category">${historyCategories[cardCategory(card)]}</span></span>
               <span class="history-question">${esc(card.question)}</span>
               <span class="history-meaning">${esc(card.answer)}</span></a>`,
           )
@@ -190,8 +217,8 @@ export function renderHistoryScreen(
       index = 0;
       update();
     });
-    category.addEventListener("change", () => {
-      context.searchCategory = category.value;
+    category.addEventListener("change", (event) => {
+      context.searchCategory = event.target.value;
       index = 0;
       update();
     });

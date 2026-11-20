@@ -1908,6 +1908,24 @@ button {
 .subject-import-sample {
   overflow-wrap: anywhere;
 }
+.subject-import textarea {
+  min-height: 72px;
+}
+.subject-import-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+.subject-import-categories li,
+.history-item-category {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 13px;
+}
 
 [data-subject-theme="ja"] {
   --subject-accent: linear-gradient(135deg, #ab2535, #861362);
@@ -1955,13 +1973,67 @@ body[data-subject-theme="history"] #app .card.history-search-panel {
   background: var(--search-panel);
   color: var(--search-ink);
 }
-.history-search-panel :is(input, select) {
+.history-search-panel input[type="search"] {
   background: var(--search-row);
   color: var(--search-ink);
   border-color: var(--search-border);
 }
 .history-search-panel :focus-visible {
   outline-color: var(--search-focus);
+}
+.history-search-categories {
+  margin: 10px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.history-search-categories legend {
+  padding: 0;
+  background: transparent;
+  color: var(--search-muted);
+  font-weight: 600;
+}
+.history-search-categories > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.history-category-option {
+  position: relative;
+  margin: 0;
+  cursor: pointer;
+}
+.history-category-option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.history-category-option > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--search-border);
+  border-radius: 12px;
+  background: var(--search-row);
+  color: var(--search-ink);
+  font-variant-numeric: tabular-nums;
+}
+.history-category-option input:checked + span {
+  border-color: var(--search-focus);
+  background: var(--subject-accent);
+  color: var(--subject-accent-ink);
+}
+.history-category-option input:focus-visible + span {
+  outline: 2px solid var(--search-focus);
+  outline-offset: 2px;
 }
 #history-pages {
   margin: 8px 0 14px;
@@ -1985,6 +2057,9 @@ body[data-subject-theme="history"] #app .card.history-search-panel {
   color: var(--search-muted);
   font-size: 13px;
   font-weight: 600;
+}
+.history-item-category {
+  margin-inline-start: 4px;
 }
 .history-question {
   font-size: 17px;

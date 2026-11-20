@@ -2,6 +2,7 @@ import { createStorage, storageMessage } from "./storage.js";
 import { bindCardSwipe, bindCardTap } from "./swipe.js";
 import { day } from "./core.js";
 import {
+  historyCategories,
   historyQueue,
   historySettings,
   isHistoryCategory,
@@ -200,12 +201,12 @@ export function createSubjectScreens(app, esc, notify, versionCard) {
     if (screen === "data") {
       app.innerHTML =
         (isHistory ? "<h1>データ管理</h1>" : heading) +
-        `<section class="card"><h2>教材JSONの取り込み</h2>
-        <label>JSONファイル（.json・.txt）<input id="subject-file" type="file" accept=".json,.txt,application/json,text/plain"></label>
+        `<section class="card subject-import"><h2>教材JSONの取り込み</h2>
+        <label>JSONファイル（.json・.txt）<input id="subject-file" type="file"></label>
         <label>またはJSONを貼り付け<textarea id="subject-json" spellcheck="false"></textarea></label>
-        <div class="row"><button id="subject-preview" class="primary" type="button">取り込み前に確認</button>
-        <button id="subject-template" type="button">JSONのひな形</button></div>
-        <div id="subject-confirmation" aria-live="polite"></div></section>
+        <div id="subject-confirmation" aria-live="polite"></div>
+        <div class="row"><button id="subject-preview" type="button">取り込み前に確認</button>
+        <button id="subject-template" type="button">JSONのひな形</button></div></section>
         ${isHistory ? `<section class="card"><h2>バックアップ</h2><p>教材・評価・履歴・設定を保存します。復元は上の取り込みから行えます。</p><button id="history-backup" type="button">バックアップを保存</button></section>` : ""}${back}`;
       if (isHistory)
         find("#history-backup").onclick = () => {
@@ -223,22 +224,27 @@ export function createSubjectScreens(app, esc, notify, versionCard) {
       const file = find("#subject-file");
       const input = find("#subject-json");
       const confirmation = find("#subject-confirmation");
+      let previewId = 0;
       file.addEventListener("change", () => {
         input.value = "";
-        confirmation.replaceChildren();
+        void preview();
       });
       input.addEventListener("input", () => {
+        previewId++;
         file.value = "";
         confirmation.replaceChildren();
       });
       find("#subject-template").onclick = () => downloadTemplate(id);
-      find("#subject-preview").onclick = async (event) => {
-        const button = event.currentTarget;
+      find("#subject-preview").onclick = preview;
+      async function preview() {
+        const current = ++previewId;
+        const canShow = () => current === previewId && isCurrent();
         const selected = file.files[0];
         const pasted = input.value;
         confirmation.replaceChildren();
-        button.disabled = true;
         try {
+          if (!selected && !pasted.trim())
+            throw Error("ファイルを選ぶか、JSONを貼り付けてください。");
           if (
             selected
               ? selected.size > fileLimit
@@ -246,15 +252,14 @@ export function createSubjectScreens(app, esc, notify, versionCard) {
           )
             throw Error("JSONは10MB以下にしてください。");
           const text = selected ? await selected.text() : pasted;
-          if (
-            !isCurrent() ||
-            selected !== file.files[0] ||
-            pasted !== input.value
-          )
-            return;
+          if (!canShow()) return;
           let raw;
           try {
-            raw = JSON.parse(text.replace(/^\uFEFF/, ""));
+            const contents = text.trim();
+            const fenced = contents.match(
+              /^```(?:json|text|txt)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i,
+            );
+            raw = JSON.parse(fenced?.[1] ?? contents);
           } catch {
             throw Error(
               "JSONを読み取れません。ファイルまたは貼り付けた内容を確認してください。",
@@ -266,18 +271,38 @@ export function createSubjectScreens(app, esc, notify, versionCard) {
           const merged = new Map(
             context.state.cards.map((card) => [keyOf(card), card]),
           );
-          const added = cards.filter((card) => !merged.has(keyOf(card)));
-          const updated = cards.length - added.length;
-          for (const card of cards) merged.set(keyOf(card), card);
+          const categories = new Map();
+          let added = 0;
+          let uncategorized = 0;
+          for (const card of cards) {
+            const key = keyOf(card);
+            const existing = merged.get(key);
+            if (!existing) added++;
+            if (isHistory && !backup) {
+              const category =
+                card.category ?? existing?.category ?? "uncategorized";
+              categories.set(category, (categories.get(category) ?? 0) + 1);
+              if (!existing && category === "uncategorized") uncategorized++;
+            }
+            merged.set(key, card);
+          }
           if (merged.size > cardLimit)
             throw Error("登録できるカードは科目ごとに10,000件までです。");
-          const uncategorized =
-            isHistory && !restore
-              ? added.filter(
-                  (card) => !card.category || card.category === "uncategorized",
-                ).length
-              : 0;
-          confirmation.innerHTML = `<p>追加 ${added.length}件 · 更新 ${backup ? 0 : updated}件</p>
+          const updated = backup ? 0 : cards.length - added;
+          confirmation.innerHTML = `<p>追加 ${added}件 · 更新 ${updated}件</p>
+            ${
+              categories.size
+                ? `<ul class="subject-import-categories" aria-label="取り込むカードの分類">${Object.entries(
+                    historyCategories,
+                  )
+                    .filter(([value]) => categories.has(value))
+                    .map(
+                      ([value, label]) =>
+                        `<li>${label} ${categories.get(value)}件</li>`,
+                    )
+                    .join("")}</ul>`
+                : ""
+            }
             ${uncategorized ? `<p>新規 ${uncategorized} 件は「未分類」に入ります。</p>` : ""}
             ${restore ? "<p>既存のカード・評価・設定を優先し、未登録のカードと履歴を追加します。</p>" : `<p>最初のカード</p><p class="subject-import-sample">${esc(cards[0].question)} → ${esc(cards[0].answer)}</p>`}
             <button id="subject-import" type="button" class="primary">${restore ? "バックアップを追加統合" : "この内容を登録"}</button>`;
@@ -309,11 +334,9 @@ export function createSubjectScreens(app, esc, notify, versionCard) {
             } else commit.disabled = false;
           };
         } catch (error) {
-          if (isCurrent()) confirmation.textContent = error.message;
-        } finally {
-          button.disabled = false;
+          if (canShow()) confirmation.textContent = error.message;
         }
-      };
+      }
       return;
     }
 
