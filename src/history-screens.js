@@ -279,10 +279,14 @@ export function renderHistoryScreen(
       ${control("count", "問題数", settings.count, 10000, "すべて")}
     </div>`
       : control("goal", "1日の学習目標（回答数）", settings.goal, 1000);
+    const primary = !setup
+      ? '<button class="primary" type="submit">設定を保存</button>'
+      : context.session
+        ? `<a class="button primary" href="${base}/learn">途中の学習を再開</a>`
+        : '<button id="history-start" class="primary" type="submit">学習を開始</button>';
     app.innerHTML = `<h1>${setup ? "学習設定" : "設定"}</h1>${setup ? "" : versionCard()}<form class="card" id="history-settings">
-      ${fields}<div class="row"><button class="primary" type="submit">${setup ? "学習を開始" : "設定を保存"}</button>
-      ${setup ? '<button id="history-save-range" type="submit">範囲・出題設定を保存</button>' : `<a class="button" href="${base}/setup">範囲・出題設定</a>`}</div>
-      ${setup && context.session ? `<a class="button" href="${base}/learn">途中の学習を再開</a>` : ""}
+      ${fields}<div class="row">${primary}
+      ${setup ? '<button type="submit">範囲・出題設定を保存</button>' : `<a class="button" href="${base}/setup">範囲・出題設定</a>`}</div>
     </form>`;
     const form = select("#history-settings");
     if (setup) {
@@ -292,11 +296,8 @@ export function renderHistoryScreen(
     form.onsubmit = async (event) => {
       event.preventDefault();
       if (context.busy) return;
-      const begin = setup && event.submitter?.id !== "history-save-range";
-      if (begin && context.session) {
-        notify("途中の学習を再開し、終了してから新しく始めてください。");
-        return;
-      }
+      const begin = event.submitter?.id === "history-start";
+      if (begin && context.session) return;
       try {
         const values = Object.fromEntries(new FormData(form));
         for (const key of ["goal", "from", "to", "count"])

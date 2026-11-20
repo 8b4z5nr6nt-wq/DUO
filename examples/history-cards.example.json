@@ -1,0 +1,43 @@
+{
+  "format": "subject-cards",
+  "version": 1,
+  "subject": "history",
+  "cards": [
+    {
+      "number": 1,
+      "question": "フランス革命が始まった年は？",
+      "answer": "1789年",
+      "category": "era"
+    },
+    {
+      "number": 2,
+      "question": "フランスの第一帝政で皇帝となった人物は？",
+      "answer": "ナポレオン1世",
+      "category": "person"
+    },
+    {
+      "number": 3,
+      "question": "1789年にフランスで始まった革命は？",
+      "answer": "フランス革命",
+      "category": "event"
+    },
+    {
+      "number": 4,
+      "question": "機械の導入や工場制の普及による産業・社会の変化を何という？",
+      "answer": "産業革命",
+      "category": "term"
+    },
+    {
+      "number": 5,
+      "question": "歴史上の出来事を時間の流れに沿って比べるとき、まず確認することは？",
+      "answer": "それぞれの出来事が起きた順序",
+      "category": "other"
+    },
+    {
+      "number": 6,
+      "question": "分類をまだ決めていないカードの例",
+      "answer": "ここに答えを入力",
+      "category": "uncategorized"
+    }
+  ]
+}

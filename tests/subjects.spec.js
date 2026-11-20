@@ -278,3 +278,52 @@ test("歴の分類を検索と出題に使い、ページ操作を一覧の上�
     page.getByRole("combobox", { name: "分類", exact: true }),
   ).toHaveValue("term");
 });
+
+test("TXTの歴史教材を未分類として登録でき、再開や画面移動で古い案内が残らない", async ({
+  page,
+}) => {
+  await page.goto("/#subject/history/data");
+  const file = page.locator("#subject-file");
+  await expect(file).toHaveAttribute("accept", /\.txt/);
+  await file.setInputFiles({
+    name: "cards.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from(JSON.stringify(material("history", [history]))),
+  });
+  await page.getByRole("button", { name: "取り込み前に確認" }).click();
+  await expect(
+    page.getByText("新規 1 件は「未分類」に入ります。", { exact: true }),
+  ).toBeVisible();
+  await confirm(page);
+  await expect(page.getByText("1枚 · 覚えた 0枚")).toBeVisible();
+
+  await navigate(page, "学習");
+  const notice = page.locator("#notice");
+  const start = page.getByRole("button", { name: "学習を開始", exact: true });
+  await page.getByLabel("開始番号").fill("2");
+  await start.click();
+  await expect(notice).toContainText(
+    "この条件で出題できるカードがありません。",
+  );
+  await page.getByRole("button", { name: "案内を閉じる", exact: true }).click();
+  await expect(notice).toBeHidden();
+  await start.click();
+  await expect(notice).toBeVisible();
+  await navigate(page, "検索");
+  await expect(notice).toBeHidden();
+
+  await navigate(page, "学習");
+  await start.click();
+  await expect(page.locator(".prompt")).toHaveText(history.question);
+  await navigate(page, "学習");
+  await expect(start).toHaveCount(0);
+  await page
+    .getByRole("link", { name: "途中の学習を再開", exact: true })
+    .click();
+  await expect(page.locator(".prompt")).toHaveText(history.question);
+  await expect(notice).toBeHidden();
+  await page.getByRole("button", { name: "学習を終える", exact: true }).click();
+  await navigate(page, "学習");
+  await expect(start).toBeVisible();
+  await expect(notice).toBeHidden();
+});

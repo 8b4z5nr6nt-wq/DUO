@@ -428,6 +428,23 @@ a {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+#notice:not([hidden]) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block: 8px;
+}
+#notice-close {
+  flex: none;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border-color: currentColor;
+  font-size: 22px;
+}
 #notice[data-tone="success"] {
   color: #24568c;
   background: #e7f2ff;

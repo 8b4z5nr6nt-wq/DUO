@@ -201,7 +201,7 @@ export function createSubjectScreens(app, esc, notify, versionCard) {
       app.innerHTML =
         (isHistory ? "<h1>データ管理</h1>" : heading) +
         `<section class="card"><h2>教材JSONの取り込み</h2>
-        <label>JSONファイル<input id="subject-file" type="file" accept=".json,application/json"></label>
+        <label>JSONファイル（.json・.txt）<input id="subject-file" type="file" accept=".json,.txt,application/json,text/plain"></label>
         <label>またはJSONを貼り付け<textarea id="subject-json" spellcheck="false"></textarea></label>
         <div class="row"><button id="subject-preview" class="primary" type="button">取り込み前に確認</button>
         <button id="subject-template" type="button">JSONのひな形</button></div>
@@ -266,13 +266,19 @@ export function createSubjectScreens(app, esc, notify, versionCard) {
           const merged = new Map(
             context.state.cards.map((card) => [keyOf(card), card]),
           );
-          const updated = cards.filter((card) =>
-            merged.has(keyOf(card)),
-          ).length;
+          const added = cards.filter((card) => !merged.has(keyOf(card)));
+          const updated = cards.length - added.length;
           for (const card of cards) merged.set(keyOf(card), card);
           if (merged.size > cardLimit)
             throw Error("登録できるカードは科目ごとに10,000件までです。");
-          confirmation.innerHTML = `<p>追加 ${cards.length - updated}件 · 更新 ${backup ? 0 : updated}件</p>
+          const uncategorized =
+            isHistory && !restore
+              ? added.filter(
+                  (card) => !card.category || card.category === "uncategorized",
+                ).length
+              : 0;
+          confirmation.innerHTML = `<p>追加 ${added.length}件 · 更新 ${backup ? 0 : updated}件</p>
+            ${uncategorized ? `<p>新規 ${uncategorized} 件は「未分類」に入ります。</p>` : ""}
             ${restore ? "<p>既存のカード・評価・設定を優先し、未登録のカードと履歴を追加します。</p>" : `<p>最初のカード</p><p class="subject-import-sample">${esc(cards[0].question)} → ${esc(cards[0].answer)}</p>`}
             <button id="subject-import" type="button" class="primary">${restore ? "バックアップを追加統合" : "この内容を登録"}</button>`;
           find("#subject-import").onclick = async (event) => {

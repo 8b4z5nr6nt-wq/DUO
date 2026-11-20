@@ -120,7 +120,7 @@ let rangeBrowse = { kind: "sentence", section: null, query: "" };
 let options = { ...defaultOptions };
 function notify(text, tone = "error") {
   const el = document.querySelector("#notice");
-  el.textContent = text;
+  document.querySelector("#notice-message").textContent = text;
   el.dataset.tone = tone;
   el.hidden = !text;
 }
@@ -1665,7 +1665,6 @@ function render() {
   if (!state) return;
   closeMenu();
   document.body.classList.remove("browse-view");
-  if (document.querySelector("#notice").dataset.tone === "success") notify("");
   activeNavigation = null;
   const [route, ...parts] = (location.hash.slice(1) || "subjects").split("/");
   const navRoute = ["detail", "section", "pick-range"].includes(route)
@@ -1736,7 +1735,11 @@ function render() {
 }
 const subjectScreens = createSubjectScreens(app, esc, notify, versionCard);
 installMenu(pauseForLeaving);
-window.addEventListener("hashchange", render);
+document.querySelector("#notice-close").onclick = () => notify("");
+window.addEventListener("hashchange", () => {
+  notify("");
+  render();
+});
 document.addEventListener("keydown", (event) => {
   if (
     !activeNavigation ||

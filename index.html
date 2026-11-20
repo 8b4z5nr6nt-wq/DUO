@@ -63,7 +63,12 @@
       </div>
       <span id="connection"></span>
     </header>
-    <div id="notice" role="alert" hidden></div>
+    <div id="notice" hidden>
+      <span id="notice-message" role="alert"></span>
+      <button type="button" id="notice-close" aria-label="案内を閉じる">
+        ×
+      </button>
+    </div>
     <aside id="app-update" class="update-banner" role="status" hidden>
       <p></p>
       <a href="/auth/refresh" class="button" data-refresh-app>最新版を開く</a>
